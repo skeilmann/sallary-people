@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,6 +62,11 @@ export function WorkerBonusCard({
   const [salary, setSalary] = useState(worker.formula_config.salaryAmount || 0);
   const [adjustmentPercent, setAdjustmentPercent] = useState(0);
   const [adjustmentNote, setAdjustmentNote] = useState('');
+
+  // Sync salary when worker config changes (e.g. after editing worker settings)
+  useEffect(() => {
+    setSalary(worker.formula_config.salaryAmount || 0);
+  }, [worker.formula_config.salaryAmount]);
 
   const config = worker.formula_config;
   const isIndividualRevenue = config.revenueSource === 'individual';
