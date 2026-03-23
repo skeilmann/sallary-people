@@ -254,6 +254,8 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
                   setConfig((prev) => ({
                     ...prev,
                     applyTaxDeductions: e.target.checked,
+                    // Clear per-worker tax rate when disabling
+                    ...(e.target.checked ? {} : { workerTaxRate: undefined }),
                   }))
                 }
                 className="rounded"
@@ -263,6 +265,35 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
             <p className="text-xs text-muted-foreground ml-6">
               {t('form.taxDeductionsNote')}
             </p>
+            {config.applyTaxDeductions && (
+              <div className="ml-6 mt-2 space-y-1">
+                <Label htmlFor="workerTaxRate" className="text-sm">
+                  {t('form.workerTaxRate')}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="workerTaxRate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={config.workerTaxRate ?? ''}
+                    onChange={(e) =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        workerTaxRate: e.target.value ? parseFloat(e.target.value) : undefined,
+                      }))
+                    }
+                    placeholder={t('form.workerTaxRatePlaceholder')}
+                    className="w-32"
+                  />
+                  <span className="text-muted-foreground">%</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t('form.workerTaxRateNote')}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Bonus Thresholds */}

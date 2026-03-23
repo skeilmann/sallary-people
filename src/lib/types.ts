@@ -7,8 +7,11 @@ export interface FormulaConfig {
   // Salary deduction (per-worker amount)
   deductSalary?: boolean;
   salaryAmount?: number;
-  // Apply global tax deductions
+  // Apply tax deductions before commission calculation
   applyTaxDeductions?: boolean;
+  // Per-worker tax rate (percentage). When set, overrides global taxRate1+taxRate2.
+  // e.g., 32 means 32% of revenue is deducted as tax.
+  workerTaxRate?: number;
   // Revenue source: 'global' (total company revenue) or 'individual' (worker's own sales)
   revenueSource?: 'global' | 'individual';
 }
@@ -96,6 +99,7 @@ export const defaultFormulaConfig: FormulaConfig = {
   deductSalary: false,
   salaryAmount: 0,
   applyTaxDeductions: false,
+  workerTaxRate: undefined,
   revenueSource: 'global',
 };
 

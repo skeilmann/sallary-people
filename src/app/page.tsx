@@ -24,6 +24,7 @@ import { getWorkers, createCalculation, getCalculation, getDefaultPipeline } fro
 import { formatCurrency, calculateBonusWithGlobalInputs } from '@/lib/formulas';
 import type { CalculationPipeline, PipelineExecutionResult } from '@/lib/pipeline-types';
 import { executePipeline } from '@/lib/pipeline-engine';
+import { usePersistedGlobalInputs, usePersistedIndividualRevenues, usePersistedPeriod } from '@/lib/usePersistedInputs';
 
 const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 const years = Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i);
@@ -41,27 +42,25 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [pipeline, setPipeline] = useState<CalculationPipeline | null>(null);
 
-  // Period selection
-  const [quarter, setQuarter] = useState<Quarter>(getCurrentQuarter());
-  const [year, setYear] = useState(getCurrentYear());
+  // Persisted period selection (survives refresh, syncs across pages)
+  const { quarter, year, setQuarter, setYear } = usePersistedPeriod(
+    getCurrentQuarter(),
+    getCurrentYear(),
+  );
 
-  // Global inputs
-  const [globalInputs, setGlobalInputs] = useState<GlobalCalculationInputs>({
-    totalRevenue: 0,
-    taxRate1: 0,
-    taxRate2: 0,
-  });
+  // Persisted global inputs (survives refresh, syncs across pages)
+  const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
 
   // Track saved calculations in this session
   const [savedWorkerIds, setSavedWorkerIds] = useState<Set<string>>(new Set());
 
-  // Track individual revenues per worker (for workers with 'individual' revenue source)
-  const [individualRevenues, setIndividualRevenues] = useState<Record<string, number>>({});
+  // Persisted individual revenues per worker (survives refresh, syncs across pages)
+  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues();
 
   // Historical calculations for comparison
   const [historicalCalculations, setHistoricalCalculations] = useState<CalculationWithWorker[]>([]);
 
-  const currentPeriod = generatePeriod(quarter, year);
+  const currentPeriod = generatePeriod(quarter as Quarter, year);
 
   // Check for compare parameter and load historical calculations
   useEffect(() => {

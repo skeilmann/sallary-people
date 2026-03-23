@@ -72,18 +72,26 @@ export function calculateBonusWithGlobalInputs(
 
   let netAmount = startingRevenue;
 
-  // Apply tax deductions if configured (rates applied to the starting revenue)
-  if (config.applyTaxDeductions) {
-    const tax1Amount = startingRevenue * (taxRate1 / 100);
-    const tax2Amount = startingRevenue * (taxRate2 / 100);
-    netAmount -= tax1Amount;
-    netAmount -= tax2Amount;
-  }
-
   // Apply salary deduction if configured (per-worker)
   if (config.deductSalary) {
     const salaryToDeduct = workerInputs?.salary ?? config.salaryAmount ?? 0;
     netAmount -= salaryToDeduct;
+  }
+
+  // Apply tax deductions if configured
+  // Per-worker tax rate takes priority over global rates
+  if (config.applyTaxDeductions) {
+    if (config.workerTaxRate != null && config.workerTaxRate > 0) {
+      // Use per-worker tax rate (applied to starting revenue)
+      const taxAmount = startingRevenue * (config.workerTaxRate / 100);
+      netAmount -= taxAmount;
+    } else {
+      // Fall back to global tax rates
+      const tax1Amount = startingRevenue * (taxRate1 / 100);
+      const tax2Amount = startingRevenue * (taxRate2 / 100);
+      netAmount -= tax1Amount;
+      netAmount -= tax2Amount;
+    }
   }
 
   // Ensure net amount doesn't go negative
@@ -117,6 +125,7 @@ export function getCalculationBreakdown(
   isIndividualRevenue: boolean;
   tax1Amount: number;
   tax2Amount: number;
+  workerTaxAmount: number;
   salaryAmount: number;
   netAmount: number;
   bonusAmount: number;
@@ -132,18 +141,26 @@ export function getCalculationBreakdown(
   let netAmount = startingRevenue;
   let tax1Amount = 0;
   let tax2Amount = 0;
+  let workerTaxAmount = 0;
   let salaryAmount = 0;
 
-  if (config.applyTaxDeductions) {
-    tax1Amount = startingRevenue * (taxRate1 / 100);
-    tax2Amount = startingRevenue * (taxRate2 / 100);
-    netAmount -= tax1Amount;
-    netAmount -= tax2Amount;
-  }
-
+  // Salary first (matches calculation order in calculateBonusWithGlobalInputs)
   if (config.deductSalary) {
     salaryAmount = workerInputs?.salary ?? config.salaryAmount ?? 0;
     netAmount -= salaryAmount;
+  }
+
+  // Tax deductions
+  if (config.applyTaxDeductions) {
+    if (config.workerTaxRate != null && config.workerTaxRate > 0) {
+      workerTaxAmount = startingRevenue * (config.workerTaxRate / 100);
+      netAmount -= workerTaxAmount;
+    } else {
+      tax1Amount = startingRevenue * (taxRate1 / 100);
+      tax2Amount = startingRevenue * (taxRate2 / 100);
+      netAmount -= tax1Amount;
+      netAmount -= tax2Amount;
+    }
   }
 
   netAmount = Math.max(0, netAmount);
@@ -154,6 +171,7 @@ export function getCalculationBreakdown(
     isIndividualRevenue,
     tax1Amount: Math.round(tax1Amount * 100) / 100,
     tax2Amount: Math.round(tax2Amount * 100) / 100,
+    workerTaxAmount: Math.round(workerTaxAmount * 100) / 100,
     salaryAmount,
     netAmount: Math.round(netAmount * 100) / 100,
     bonusAmount,

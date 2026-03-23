@@ -191,24 +191,31 @@ export function WorkerBonusCard({
                     <span>{formatCurrency(breakdown.totalRevenue)}</span>
                   </div>
 
-                  {config.applyTaxDeductions && (
-                    <>
-                      <div className="flex justify-between text-sm text-red-600">
-                        <span>- {t('tax')} 1 ({globalInputs.taxRate1}%)</span>
-                        <span>-{formatCurrency(breakdown.tax1Amount)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm text-red-600">
-                        <span>- {t('tax')} 2 ({globalInputs.taxRate2}%)</span>
-                        <span>-{formatCurrency(breakdown.tax2Amount)}</span>
-                      </div>
-                    </>
-                  )}
-
                   {config.deductSalary && (
                     <div className="flex justify-between text-sm text-red-600">
                       <span>- {t('salary')}</span>
                       <span>-{formatCurrency(breakdown.salaryAmount)}</span>
                     </div>
+                  )}
+
+                  {config.applyTaxDeductions && (
+                    config.workerTaxRate != null && config.workerTaxRate > 0 ? (
+                      <div className="flex justify-between text-sm text-red-600">
+                        <span>- {t('tax')} ({config.workerTaxRate}%)</span>
+                        <span>-{formatCurrency(breakdown.workerTaxAmount)}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-sm text-red-600">
+                          <span>- {t('tax')} 1 ({globalInputs.taxRate1}%)</span>
+                          <span>-{formatCurrency(breakdown.tax1Amount)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-red-600">
+                          <span>- {t('tax')} 2 ({globalInputs.taxRate2}%)</span>
+                          <span>-{formatCurrency(breakdown.tax2Amount)}</span>
+                        </div>
+                      </>
+                    )
                   )}
 
                   <div className="flex justify-between text-sm font-medium border-t pt-2">

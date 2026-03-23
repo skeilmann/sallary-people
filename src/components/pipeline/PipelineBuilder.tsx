@@ -41,6 +41,7 @@ import {
 } from '@/lib/pipeline-utils';
 import { executePipeline } from '@/lib/pipeline-engine';
 import { formatCurrency } from '@/lib/formulas';
+import { usePersistedGlobalInputs, usePersistedIndividualRevenues } from '@/lib/usePersistedInputs';
 
 interface PipelineBuilderProps {
   pipeline: CalculationPipeline | null;
@@ -65,15 +66,11 @@ export function PipelineBuilder({
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
-  // Global inputs for preview
-  const [globalInputs, setGlobalInputs] = useState<GlobalCalculationInputs>({
-    totalRevenue: 0,
-    taxRate1: 0,
-    taxRate2: 0,
-  });
+  // Persisted global inputs (shared with Dashboard, survives refresh)
+  const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
 
-  // Individual revenues for preview
-  const [individualRevenues, setIndividualRevenues] = useState<Record<string, number>>({});
+  // Persisted individual revenues (shared with Dashboard, survives refresh)
+  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues();
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null);
