@@ -168,10 +168,31 @@ function executeItem(
 
       // Determine the base amount for commission
       // Individual-revenue workers use their own revenue, not the pipeline running total
+      // Then apply per-worker deductions (salary, tax) to get the net amount
       const isIndividual = config.revenueSource === 'individual';
-      const baseAmount = isIndividual
+      const rawBase = isIndividual
         ? (workerInputs[worker.id]?.individualRevenue ?? 0)
         : runningTotal;
+
+      let baseAmount = rawBase;
+
+      // Deduct salary if configured
+      if (config.deductSalary) {
+        const salaryToDeduct = workerInputs[worker.id]?.salary ?? config.salaryAmount ?? 0;
+        baseAmount -= salaryToDeduct;
+      }
+
+      // Deduct per-worker tax if configured
+      if (config.applyTaxDeductions) {
+        if (config.workerTaxRate != null && config.workerTaxRate > 0) {
+          baseAmount -= rawBase * (config.workerTaxRate / 100);
+        } else {
+          baseAmount -= rawBase * (globalInputs.taxRate1 / 100);
+          baseAmount -= rawBase * (globalInputs.taxRate2 / 100);
+        }
+      }
+
+      baseAmount = Math.max(0, baseAmount);
 
       // Base commission
       let commission = baseAmount * (config.commissionRate / 100);
