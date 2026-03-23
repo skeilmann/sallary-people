@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,7 +33,11 @@ export function HistoricalComparisonCard({
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-lg">{calculation.worker.name}</CardTitle>
+            <CardTitle className="text-lg">
+              <Link href={`/workers?edit=${calculation.worker.id}`} className="hover:underline hover:text-primary transition-colors">
+                {calculation.worker.name}
+              </Link>
+            </CardTitle>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="outline" className="bg-blue-100">
                 {calculation.period}

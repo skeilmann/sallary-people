@@ -422,7 +422,11 @@ export default function DashboardPage() {
                         return (
                           <Card key={worker.id} className="border-dashed opacity-60">
                             <CardHeader className="pb-2">
-                              <CardTitle className="text-lg">{worker.name}</CardTitle>
+                              <CardTitle className="text-lg">
+                                <Link href={`/workers?edit=${worker.id}`} className="hover:underline hover:text-primary transition-colors">
+                                  {worker.name}
+                                </Link>
+                              </CardTitle>
                             </CardHeader>
                             <CardContent className="py-4 text-center text-muted-foreground text-sm">
                               {t('enterRevenueFirst')}

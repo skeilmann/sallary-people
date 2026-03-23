@@ -23,7 +23,11 @@ export function WorkerCard({ worker, onEdit, onDelete, onCalculate }: WorkerCard
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
-          <CardTitle className="text-lg">{worker.name}</CardTitle>
+          <CardTitle className="text-lg">
+            <button type="button" onClick={() => onEdit(worker)} className="hover:underline hover:text-primary transition-colors text-left">
+              {worker.name}
+            </button>
+          </CardTitle>
           <Badge variant="secondary">
             {t(`metrics.${config.baseMetric}`)}
           </Badge>

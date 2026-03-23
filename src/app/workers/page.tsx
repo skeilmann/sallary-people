@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ const MAX_COMPARE_SELECTIONS = 3;
 
 export default function WorkersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const t = useTranslations('workers');
   const tHistory = useTranslations('workerHistory');
   const tCommon = useTranslations('common');
@@ -40,6 +41,20 @@ export default function WorkersPage() {
       }
     }
   }, []);
+
+  // Auto-open edit dialog when ?edit=WORKER_ID is in the URL
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId && workers.length > 0) {
+      const worker = workers.find((w) => w.id === editId);
+      if (worker) {
+        setEditingWorker(worker);
+        setFormOpen(true);
+        // Clean up the URL
+        router.replace('/workers');
+      }
+    }
+  }, [searchParams, workers, router]);
 
   // Persist selections to localStorage
   useEffect(() => {

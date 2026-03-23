@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -113,7 +114,11 @@ export function WorkerBonusCard({
       >
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between">
-            <CardTitle className="text-lg">{worker.name}</CardTitle>
+            <CardTitle className="text-lg">
+              <Link href={`/workers?edit=${worker.id}`} className="hover:underline hover:text-primary transition-colors">
+                {worker.name}
+              </Link>
+            </CardTitle>
             {isIndividualRevenue && (
               <Badge variant="outline" className="bg-blue-50 text-blue-700 text-xs">
                 {t('individualRevenue')}
@@ -164,7 +169,12 @@ export function WorkerBonusCard({
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{worker.name} - {t('bonusDetails')}</DialogTitle>
+            <DialogTitle>
+              <Link href={`/workers?edit=${worker.id}`} className="hover:underline hover:text-primary transition-colors">
+                {worker.name}
+              </Link>
+              {' '}- {t('bonusDetails')}
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
