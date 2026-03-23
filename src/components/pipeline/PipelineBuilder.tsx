@@ -1,0 +1,515 @@
+'use client';
+
+import { useState, useMemo, useCallback } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
+import { useTranslations } from 'next-intl';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Save, RotateCcw, Info } from 'lucide-react';
+import { PipelineRowComponent } from './PipelineRowComponent';
+import { ItemPalette } from './ItemPalette';
+import { PipelinePreview } from './PipelinePreview';
+import { DraggablePipelineItem } from './DraggablePipelineItem';
+import type {
+  PipelineRow,
+  PipelineItem,
+  CalculationPipeline,
+  PipelineExecutionResult,
+} from '@/lib/pipeline-types';
+import type { Worker, GlobalCalculationInputs } from '@/lib/types';
+import {
+  addRow,
+  removeRow,
+  removeItem,
+  findItemRow,
+  generatePipelineId,
+  generateDefaultPipeline,
+} from '@/lib/pipeline-utils';
+import { executePipeline } from '@/lib/pipeline-engine';
+import { formatCurrency } from '@/lib/formulas';
+
+interface PipelineBuilderProps {
+  pipeline: CalculationPipeline | null;
+  workers: Worker[];
+  onSave: (rows: PipelineRow[], name: string) => Promise<void>;
+  onDelete?: () => Promise<void>;
+}
+
+export function PipelineBuilder({
+  pipeline,
+  workers,
+  onSave,
+  onDelete,
+}: PipelineBuilderProps) {
+  const t = useTranslations('pipeline');
+  const tCommon = useTranslations('common');
+  const tDashboard = useTranslations('dashboard');
+
+  // Pipeline state
+  const [rows, setRows] = useState<PipelineRow[]>(pipeline?.rows ?? []);
+  const [pipelineName, setPipelineName] = useState(pipeline?.name ?? 'Default Pipeline');
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // Global inputs for preview
+  const [globalInputs, setGlobalInputs] = useState<GlobalCalculationInputs>({
+    totalRevenue: 0,
+    taxRate1: 0,
+    taxRate2: 0,
+  });
+
+  // Individual revenues for preview
+  const [individualRevenues, setIndividualRevenues] = useState<Record<string, number>>({});
+
+  // DnD state
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeItem, setActiveItem] = useState<PipelineItem | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    })
+  );
+
+  // Build worker inputs for preview
+  const workerInputs = useMemo(() => {
+    const inputs: Record<string, { salary?: number; individualRevenue?: number }> = {};
+    for (const w of workers) {
+      inputs[w.id] = {
+        salary: w.formula_config.salaryAmount,
+        individualRevenue: individualRevenues[w.id] || 0,
+      };
+    }
+    return inputs;
+  }, [workers, individualRevenues]);
+
+  // Live calculation result
+  const executionResult: PipelineExecutionResult | null = useMemo(() => {
+    if (rows.length === 0 || globalInputs.totalRevenue === 0) return null;
+    try {
+      const pipelineForExec: CalculationPipeline = {
+        id: pipeline?.id ?? '',
+        name: pipelineName,
+        rows,
+        created_at: '',
+        updated_at: '',
+      };
+      return executePipeline(pipelineForExec, globalInputs, workers, workerInputs);
+    } catch {
+      return null;
+    }
+  }, [rows, globalInputs, workers, workerInputs, pipeline?.id, pipelineName]);
+
+  // ==================== DnD Handlers ====================
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const { active } = event;
+    setActiveId(active.id as string);
+
+    // Check if dragging from palette
+    const paletteData = active.data.current;
+    if (paletteData?.type === 'palette-item') {
+      setActiveItem(paletteData.item as PipelineItem);
+    } else {
+      // Dragging from existing row
+      const item = rows.flatMap(r => r.items).find(i => i.id === active.id);
+      setActiveItem(item ?? null);
+    }
+  }, [rows]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    setActiveItem(null);
+
+    if (!over) return;
+
+    const activeData = active.data.current;
+    const overId = over.id as string;
+
+    // Determine target row
+    let targetRowId: string | null = null;
+    if (overId.startsWith('row-')) {
+      targetRowId = overId.replace('row-', '');
+    } else {
+      // Dropped on another item — find its row
+      const targetRow = findItemRow(rows, overId);
+      targetRowId = targetRow?.id ?? null;
+    }
+
+    if (!targetRowId) return;
+
+    // Case 1: Palette item dropped into a row
+    if (activeData?.type === 'palette-item') {
+      const paletteItem = activeData.item as PipelineItem;
+      const newItem: PipelineItem = {
+        ...paletteItem,
+        id: generatePipelineId(),
+      };
+
+      setRows(prev =>
+        prev.map(r =>
+          r.id === targetRowId
+            ? { ...r, items: [...r.items, newItem] }
+            : r
+        )
+      );
+      return;
+    }
+
+    // Case 2: Moving existing item
+    const activeItemId = active.id as string;
+    const sourceRow = findItemRow(rows, activeItemId);
+
+    if (!sourceRow) return;
+
+    if (sourceRow.id === targetRowId) {
+      // Same row — reorder
+      const oldIndex = sourceRow.items.findIndex(i => i.id === activeItemId);
+      const overItem = sourceRow.items.find(i => i.id === overId);
+      const newIndex = overItem
+        ? sourceRow.items.indexOf(overItem)
+        : sourceRow.items.length;
+
+      if (oldIndex !== newIndex) {
+        setRows(prev =>
+          prev.map(r =>
+            r.id === targetRowId
+              ? { ...r, items: arrayMove(r.items, oldIndex, newIndex) }
+              : r
+          )
+        );
+      }
+    } else {
+      // Different row — move item
+      const movedItem = sourceRow.items.find(i => i.id === activeItemId);
+      if (!movedItem) return;
+
+      setRows(prev => {
+        const updated = prev.map(r => {
+          if (r.id === sourceRow.id) {
+            return { ...r, items: r.items.filter(i => i.id !== activeItemId) };
+          }
+          if (r.id === targetRowId) {
+            return { ...r, items: [...r.items, movedItem] };
+          }
+          return r;
+        });
+        return updated;
+      });
+    }
+  }, [rows]);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    // Visual feedback handled by droppable's isOver
+  }, []);
+
+  // ==================== Row/Item Actions ====================
+
+  const handleAddRow = useCallback((atIndex?: number) => {
+    setRows(prev => addRow(prev, atIndex));
+  }, []);
+
+  const handleRemoveRow = useCallback((rowId: string) => {
+    setRows(prev => removeRow(prev, rowId));
+  }, []);
+
+  const handleRemoveItem = useCallback((itemId: string) => {
+    setRows(prev => removeItem(prev, itemId));
+  }, []);
+
+  const handleAddItemFromPalette = useCallback((item: PipelineItem) => {
+    // If no rows exist, create one first
+    if (rows.length === 0) {
+      const newRowId = generatePipelineId();
+      setRows([{
+        id: newRowId,
+        items: [{ ...item, id: generatePipelineId() }],
+      }]);
+      return;
+    }
+    // Add to the last row
+    const lastRow = rows[rows.length - 1];
+    setRows(prev =>
+      prev.map(r =>
+        r.id === lastRow.id
+          ? { ...r, items: [...r.items, { ...item, id: generatePipelineId() }] }
+          : r
+      )
+    );
+  }, [rows]);
+
+  const handleReset = useCallback(() => {
+    const defaultPipeline = generateDefaultPipeline(workers);
+    setRows(defaultPipeline.rows);
+    setPipelineName(defaultPipeline.name);
+  }, [workers]);
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      await onSave(rows, pipelineName);
+      setSaveMessage(t('saved'));
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch {
+      setSaveMessage(t('saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  }, [rows, pipelineName, onSave, t]);
+
+  // ==================== Render ====================
+
+  const workerMap = new Map(workers.map(w => [w.id, w]));
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
+      {/* Main Pipeline Area */}
+      <div className="space-y-6">
+        {/* Header with hints */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-lg">
+            <Info className="w-4 h-4 flex-shrink-0" />
+            <div>
+              <p>{t('sameRowHint')}</p>
+              <p>{t('dragHint')}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Global Inputs for Preview */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">{tDashboard('globalInputs')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">{tDashboard('totalRevenue')}</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  value={globalInputs.totalRevenue || ''}
+                  onChange={(e) =>
+                    setGlobalInputs(prev => ({
+                      ...prev,
+                      totalRevenue: parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                  placeholder="0"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">{tDashboard('taxRate1')}</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={globalInputs.taxRate1 || ''}
+                    onChange={(e) =>
+                      setGlobalInputs(prev => ({
+                        ...prev,
+                        taxRate1: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0"
+                    className="h-8 text-sm"
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">{tDashboard('taxRate2')}</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={globalInputs.taxRate2 || ''}
+                    onChange={(e) =>
+                      setGlobalInputs(prev => ({
+                        ...prev,
+                        taxRate2: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0"
+                    className="h-8 text-sm"
+                  />
+                  <span className="text-xs text-muted-foreground">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Individual revenue inputs for applicable workers */}
+            {workers.filter(w => w.formula_config.revenueSource === 'individual').length > 0 && (
+              <div className="mt-4 pt-3 border-t space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Individual Revenues</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {workers
+                    .filter(w => w.formula_config.revenueSource === 'individual')
+                    .map(w => (
+                      <div key={w.id} className="flex items-center gap-2">
+                        <Label className="text-xs min-w-[80px]">{w.name}</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={individualRevenues[w.id] || ''}
+                          onChange={(e) =>
+                            setIndividualRevenues(prev => ({
+                              ...prev,
+                              [w.id]: parseFloat(e.target.value) || 0,
+                            }))
+                          }
+                          placeholder="0"
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Revenue header */}
+        {globalInputs.totalRevenue > 0 && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-green-50 border-2 border-green-200 rounded-xl">
+            <span className="text-sm font-medium text-green-800">{t('revenue')}</span>
+            <span className="text-lg font-mono font-bold text-green-800 ml-auto">
+              {formatCurrency(globalInputs.totalRevenue)}
+            </span>
+          </div>
+        )}
+
+        {/* DnD Context wraps rows and palette */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver}
+        >
+          {/* Pipeline Rows */}
+          <div className="space-y-2">
+            {rows.map((row, index) => (
+              <PipelineRowComponent
+                key={row.id}
+                row={row}
+                rowIndex={index}
+                rowResult={executionResult?.rowResults[index]}
+                workers={workers}
+                onRemoveRow={handleRemoveRow}
+                onRemoveItem={handleRemoveItem}
+                onAddRowBelow={handleAddRow}
+              />
+            ))}
+          </div>
+
+          {/* Add first row button when empty */}
+          {rows.length === 0 && (
+            <div className="flex justify-center py-8">
+              <Button variant="outline" onClick={() => handleAddRow()}>
+                <Plus className="w-4 h-4 mr-2" />
+                {t('addRow')}
+              </Button>
+            </div>
+          )}
+
+          {/* Add row at bottom */}
+          {rows.length > 0 && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => handleAddRow()}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                {t('addRow')}
+              </Button>
+            </div>
+          )}
+
+          {/* Drag overlay */}
+          <DragOverlay>
+            {activeItem && (
+              <DraggablePipelineItem
+                item={activeItem}
+                workerName={activeItem.workerId ? workerMap.get(activeItem.workerId)?.name : undefined}
+                commissionRate={activeItem.workerId ? workerMap.get(activeItem.workerId)?.formula_config.commissionRate : undefined}
+                disabled
+              />
+            )}
+          </DragOverlay>
+        </DndContext>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 pt-4 border-t">
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="w-4 h-4 mr-2" />
+            {saving ? t('saving') : t('save')}
+          </Button>
+          <Button variant="outline" onClick={handleReset}>
+            <RotateCcw className="w-4 h-4 mr-2" />
+            {t('reset')}
+          </Button>
+          {onDelete && pipeline && (
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (confirm(t('deleteConfirm'))) onDelete();
+              }}
+              className="ml-auto"
+            >
+              {t('deletePipeline')}
+            </Button>
+          )}
+          {saveMessage && (
+            <Badge variant={saveMessage === t('saved') ? 'default' : 'destructive'} className="ml-auto">
+              {saveMessage}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Sidebar: Palette + Preview */}
+      <div className="space-y-6">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+        >
+          <ItemPalette
+            rows={rows}
+            workers={workers}
+            onAddItem={handleAddItemFromPalette}
+          />
+        </DndContext>
+
+        <PipelinePreview result={executionResult} />
+      </div>
+    </div>
+  );
+}
