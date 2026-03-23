@@ -5,12 +5,10 @@ import { usePathname } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import type { Locale } from '@/i18n/config';
 
 export function Navigation() {
   const pathname = usePathname();
   const t = useTranslations();
-  const locale = useLocale() as Locale;
 
   const navItems = [
     { href: '/', label: t('nav.dashboard') },
@@ -45,7 +43,7 @@ export function Navigation() {
                 </Link>
               ))}
             </nav>
-            <LanguageSwitcher currentLocale={locale} />
+            <LanguageSwitcher />
           </div>
         </div>
       </div>

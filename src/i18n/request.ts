@@ -1,18 +1,10 @@
-import { getRequestConfig } from 'next-intl/server';
-import { cookies } from 'next/headers';
-import { defaultLocale, locales, type Locale } from './config';
+import { defaultLocale, type Locale } from './config';
+import en from '../../messages/en.json';
+import it from '../../messages/it.json';
+import ro from '../../messages/ro.json';
 
-export default getRequestConfig(async () => {
-  const cookieStore = await cookies();
-  const localeCookie = cookieStore.get('locale')?.value;
+const allMessages: Record<Locale, typeof en> = { en, it, ro };
 
-  // Validate and use locale from cookie, or fall back to default
-  const locale: Locale = locales.includes(localeCookie as Locale)
-    ? (localeCookie as Locale)
-    : defaultLocale;
-
-  return {
-    locale,
-    messages: (await import(`../../messages/${locale}.json`)).default,
-  };
-});
+export function getMessages(locale: Locale) {
+  return allMessages[locale] ?? allMessages[defaultLocale];
+}

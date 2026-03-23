@@ -1,7 +1,5 @@
 'use client';
 
-import { useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Select,
   SelectContent,
@@ -11,24 +9,18 @@ import {
 } from '@/components/ui/select';
 import { locales, localeNames, localeFlags, type Locale } from '@/i18n/config';
 import { setLocale } from '@/lib/actions';
+import { useLocale } from 'next-intl';
 
-interface LanguageSwitcherProps {
-  currentLocale: Locale;
-}
-
-export function LanguageSwitcher({ currentLocale }: LanguageSwitcherProps) {
-  const [isPending, startTransition] = useTransition();
-  const router = useRouter();
+export function LanguageSwitcher() {
+  const currentLocale = useLocale() as Locale;
 
   const handleChange = (newLocale: Locale) => {
-    startTransition(async () => {
-      await setLocale(newLocale);
-      router.refresh();
-    });
+    setLocale(newLocale);
+    window.location.reload();
   };
 
   return (
-    <Select value={currentLocale} onValueChange={handleChange} disabled={isPending}>
+    <Select value={currentLocale} onValueChange={handleChange}>
       <SelectTrigger className="w-[140px] h-8">
         <SelectValue>
           {localeFlags[currentLocale]} {localeNames[currentLocale]}
