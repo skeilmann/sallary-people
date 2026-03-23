@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { Worker, CalculationWithWorker } from '@/lib/types';
 import { getCalculations } from '@/lib/supabase';
@@ -56,8 +55,8 @@ export function WorkerHistoryCard({
   const totalSelected = selectedCalculationIds.size;
   const canSelectMore = totalSelected < maxSelections;
 
-  // Show first 3 calculations, or all if expanded
-  const displayedCalculations = expanded ? calculations : calculations.slice(0, 3);
+  // Show all calculations when expanded
+  const displayedCalculations = calculations;
 
   if (loading) {
     return (
@@ -70,33 +69,32 @@ export function WorkerHistoryCard({
   }
 
   if (calculations.length === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-muted-foreground">
-            {t('historyFor', { name: worker.name })}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-4 text-center text-muted-foreground text-sm">
-          {t('noHistory')}
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm">
+    <Card className="border-dashed">
+      <CardContent className="py-2 px-4">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between text-left"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span className="text-sm text-muted-foreground">
             {t('historyFor', { name: worker.name })}
-          </CardTitle>
-          <Badge variant="secondary">
-            {t('calculationsCount', { count: calculations.length })}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
+          </span>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs">
+              {t('calculationsCount', { count: calculations.length })}
+            </Badge>
+            <span className="text-muted-foreground text-xs">
+              {expanded ? '▲' : '▼'}
+            </span>
+          </div>
+        </button>
+
+        {expanded && (
+          <div className="space-y-2 mt-3">
         {displayedCalculations.map((calc) => {
           const isSelected = selectedCalculationIds.has(calc.id);
           const canSelect = isSelected || canSelectMore;
@@ -149,17 +147,7 @@ export function WorkerHistoryCard({
           );
         })}
 
-        {calculations.length > 3 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full"
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded
-              ? t('showLess')
-              : t('showMore', { count: calculations.length - 3 })}
-          </Button>
+          </div>
         )}
       </CardContent>
     </Card>

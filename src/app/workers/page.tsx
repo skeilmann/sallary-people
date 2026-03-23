@@ -182,9 +182,9 @@ export default function WorkersPage() {
           )}
 
           {/* Worker Cards with History */}
-          <div className="space-y-8">
+          <div className="space-y-3">
             {workers.map((worker) => (
-              <div key={worker.id} className="space-y-3">
+              <div key={worker.id} className="space-y-1">
                 {/* Worker Profile Card */}
                 <WorkerCard
                   worker={worker}

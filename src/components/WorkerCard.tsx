@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Worker } from '@/lib/types';
@@ -21,62 +21,56 @@ export function WorkerCard({ worker, onEdit, onDelete, onCalculate }: WorkerCard
 
   return (
     <Card className="hover:shadow-md transition-shadow">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between">
-          <CardTitle className="text-lg">
-            <button type="button" onClick={() => onEdit(worker)} className="hover:underline hover:text-primary transition-colors text-left">
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center justify-between gap-4">
+          {/* Name + formula summary */}
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() => onEdit(worker)}
+              className="font-semibold hover:underline hover:text-primary transition-colors text-left whitespace-nowrap"
+            >
               {worker.name}
             </button>
-          </CardTitle>
-          <Badge variant="secondary">
-            {t(`metrics.${config.baseMetric}`)}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground mb-4">
-          {describeFormulaTranslated(config, t)}
-        </p>
+            <span className="text-sm text-muted-foreground truncate hidden sm:inline">
+              {describeFormulaTranslated(config, t)}
+            </span>
+          </div>
 
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Badge variant="outline">
-            {t('formula.commission', { rate: config.commissionRate })}
-          </Badge>
-          {config.deductions.map((d) => (
-            <Badge key={d} variant="outline" className="text-orange-600 border-orange-300">
-              -{t(`deductionLabels.${d}`)}
+          {/* Badges */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Badge variant="outline" className="hidden md:inline-flex">
+              {t('formula.commission', { rate: config.commissionRate })}
             </Badge>
-          ))}
-          {config.bonusThresholds.map((threshold, i) => (
-            <Badge key={i} variant="outline" className="text-green-600 border-green-300">
-              +{threshold.extraRate}% &gt;${threshold.above.toLocaleString()}
-            </Badge>
-          ))}
-        </div>
+            {config.deductSalary && config.salaryAmount ? (
+              <Badge variant="outline" className="text-blue-600 border-blue-300 hidden lg:inline-flex">
+                -{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(config.salaryAmount)}
+              </Badge>
+            ) : null}
+            {config.applyTaxDeductions && config.workerTaxRate ? (
+              <Badge variant="outline" className="text-red-600 border-red-300 hidden lg:inline-flex">
+                -{config.workerTaxRate}%
+              </Badge>
+            ) : null}
+          </div>
 
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            onClick={() => onCalculate(worker)}
-            className="flex-1"
-          >
-            {t('calculateBonus')}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onEdit(worker)}
-          >
-            {tCommon('edit')}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={() => onDelete(worker)}
-          >
-            {tCommon('delete')}
-          </Button>
+          {/* Actions */}
+          <div className="flex gap-1 flex-shrink-0">
+            <Button size="sm" variant="ghost" onClick={() => onCalculate(worker)}>
+              {t('calculateBonus')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => onEdit(worker)}>
+              {tCommon('edit')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              onClick={() => onDelete(worker)}
+            >
+              {tCommon('delete')}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
