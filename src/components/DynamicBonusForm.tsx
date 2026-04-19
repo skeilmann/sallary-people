@@ -19,11 +19,18 @@ import type { Worker, CalculationInputs, Quarter } from '@/lib/types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
 import {
   calculateBonus,
+  calculateBonusWithGlobalInputs,
   getRequiredFields,
   formatCurrency,
   calculateFinalAmount,
   describeFormulaTranslated,
 } from '@/lib/formulas';
+import {
+  usePersistedPeriod,
+  usePersistedGlobalInputs,
+  usePersistedIndividualRevenues,
+  usePersistedSalaryOverrides,
+} from '@/lib/usePersistedInputs';
 
 interface DynamicBonusFormProps {
   workers: Worker[];
@@ -51,11 +58,22 @@ export function DynamicBonusForm({
 }: DynamicBonusFormProps) {
   const t = useTranslations('calculate');
   const tWorkers = useTranslations('workers');
+  const tBonusCard = useTranslations('bonusCard');
   const tCommon = useTranslations('common');
 
   const [selectedWorkerId, setSelectedWorkerId] = useState(initialWorkerId || '');
-  const [quarter, setQuarter] = useState<Quarter>(getCurrentQuarter());
-  const [year, setYear] = useState(getCurrentYear());
+
+  // Shared period (same as Dashboard)
+  const { quarter, year, setQuarter, setYear } = usePersistedPeriod(
+    getCurrentQuarter(),
+    getCurrentYear(),
+  );
+
+  // Shared period-scoped inputs
+  const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs(quarter, year);
+  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues(quarter, year);
+  const { salaryOverrides, setSalaryOverrides } = usePersistedSalaryOverrides(quarter, year);
+
   const [inputs, setInputs] = useState<CalculationInputs>({ baseValue: 0 });
   const [adjustmentPercent, setAdjustmentPercent] = useState(0);
   const [adjustmentNote, setAdjustmentNote] = useState('');
@@ -71,24 +89,74 @@ export function DynamicBonusForm({
     [selectedWorker]
   );
 
-  // Reset inputs when worker changes
+  // Whether this worker's bonus is revenue-driven (matches Dashboard's calc path).
+  const isRevenueMetric = selectedWorker?.formula_config.baseMetric === 'revenue';
+  const isIndividualRevenue = selectedWorker?.formula_config.revenueSource === 'individual';
+  const hasSalaryDeduction = !!selectedWorker?.formula_config.deductSalary;
+
+  // Seed form values from shared persisted state when worker or period changes.
   useEffect(() => {
+    if (!selectedWorker) {
+      setInputs({ baseValue: 0 });
+      setAdjustmentPercent(0);
+      setAdjustmentNote('');
+      return;
+    }
     const newInputs: CalculationInputs = { baseValue: 0 };
+
+    if (isRevenueMetric) {
+      if (isIndividualRevenue) {
+        const value = individualRevenues[selectedWorker.id] ?? 0;
+        newInputs.baseValue = value;
+        newInputs.individualRevenue = value;
+      } else {
+        newInputs.baseValue = globalInputs.totalRevenue;
+      }
+    }
+
+    if (hasSalaryDeduction) {
+      newInputs.salary =
+        salaryOverrides[selectedWorker.id] ?? selectedWorker.formula_config.salaryAmount ?? 0;
+    }
+
     for (const field of requiredFields) {
-      if (field !== 'baseValue') {
-        // Use type assertion through unknown for dynamic field assignment
+      if (field !== 'baseValue' && !(field in newInputs)) {
         (newInputs as unknown as Record<string, number>)[field] = 0;
       }
     }
+
     setInputs(newInputs);
     setAdjustmentPercent(0);
     setAdjustmentNote('');
-  }, [selectedWorkerId, requiredFields]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedWorkerId,
+    quarter,
+    year,
+    requiredFields,
+    isRevenueMetric,
+    isIndividualRevenue,
+    hasSalaryDeduction,
+  ]);
 
   const calculatedAmount = useMemo(() => {
     if (!selectedWorker) return 0;
-    return calculateBonus(selectedWorker.formula_config, inputs);
-  }, [selectedWorker, inputs]);
+    const config = selectedWorker.formula_config;
+    // Use the Dashboard calculation path for revenue-based workers so totals match
+    // (applies salary and tax deductions consistently).
+    if (config.baseMetric === 'revenue') {
+      const effectiveGlobalInputs =
+        config.revenueSource === 'individual'
+          ? globalInputs
+          : { ...globalInputs, totalRevenue: inputs.baseValue || 0 };
+      return calculateBonusWithGlobalInputs(config, effectiveGlobalInputs, {
+        salary: inputs.salary,
+        individualRevenue:
+          config.revenueSource === 'individual' ? inputs.baseValue || 0 : undefined,
+      });
+    }
+    return calculateBonus(config, inputs);
+  }, [selectedWorker, inputs, globalInputs]);
 
   const adjustmentAmount = useMemo(() => {
     return Math.round(calculatedAmount * (adjustmentPercent / 100) * 100) / 100;
@@ -100,6 +168,22 @@ export function DynamicBonusForm({
 
   const handleInputChange = (field: string, value: number) => {
     setInputs((prev) => ({ ...prev, [field]: value }));
+
+    // Write shared fields back to the persisted period-scoped maps so other pages see them.
+    if (!selectedWorker) return;
+
+    if (field === 'baseValue' && isRevenueMetric) {
+      if (isIndividualRevenue) {
+        setIndividualRevenues((prev) => ({ ...prev, [selectedWorker.id]: value }));
+        setInputs((prev) => ({ ...prev, individualRevenue: value }));
+      } else {
+        setGlobalInputs((prev) => ({ ...prev, totalRevenue: value }));
+      }
+    }
+
+    if (field === 'salary') {
+      setSalaryOverrides((prev) => ({ ...prev, [selectedWorker.id]: value }));
+    }
   };
 
   const getFieldLabel = (field: string): string => {
@@ -120,7 +204,7 @@ export function DynamicBonusForm({
     try {
       await onSave({
         workerId: selectedWorkerId,
-        period: generatePeriod(quarter, year),
+        period: generatePeriod(quarter as Quarter, year),
         inputs,
         calculatedAmount,
         adjustmentAmount,
@@ -159,7 +243,7 @@ export function DynamicBonusForm({
 
             <div className="space-y-2">
               <Label>{t('step1.quarter')}</Label>
-              <Select value={quarter} onValueChange={(v) => setQuarter(v as Quarter)}>
+              <Select value={quarter} onValueChange={(v) => setQuarter(v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -230,6 +314,23 @@ export function DynamicBonusForm({
               </div>
             ))}
 
+            {hasSalaryDeduction && (
+              <div className="space-y-2">
+                <Label htmlFor="salary">{tBonusCard('salaryToDeduct')}</Label>
+                <Input
+                  id="salary"
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={inputs.salary ?? 0}
+                  onChange={(e) =>
+                    handleInputChange('salary', parseFloat(e.target.value) || 0)
+                  }
+                  className="max-w-xs"
+                />
+              </div>
+            )}
+
             <div className="pt-4 border-t">
               <p className="text-sm text-muted-foreground">{t('step2.calculatedBonus')}</p>
               <p className="text-2xl font-bold">{formatCurrency(calculatedAmount)}</p>
@@ -293,7 +394,7 @@ export function DynamicBonusForm({
                 <p className="text-sm text-muted-foreground">{t('step4.finalBonusAmount')}</p>
                 <p className="text-3xl font-bold">{formatCurrency(finalAmount)}</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {selectedWorker.name} • {generatePeriod(quarter, year)}
+                  {selectedWorker.name} • {generatePeriod(quarter as Quarter, year)}
                 </p>
               </div>
             </div>

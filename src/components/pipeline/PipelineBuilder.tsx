@@ -41,7 +41,12 @@ import {
 } from '@/lib/pipeline-utils';
 import { executePipeline } from '@/lib/pipeline-engine';
 import { formatCurrency } from '@/lib/formulas';
-import { usePersistedGlobalInputs, usePersistedIndividualRevenues } from '@/lib/usePersistedInputs';
+import {
+  usePersistedGlobalInputs,
+  usePersistedIndividualRevenues,
+  usePersistedPeriod,
+} from '@/lib/usePersistedInputs';
+import { getCurrentQuarter, getCurrentYear } from '@/lib/types';
 
 interface PipelineBuilderProps {
   pipeline: CalculationPipeline | null;
@@ -66,11 +71,14 @@ export function PipelineBuilder({
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
-  // Persisted global inputs (shared with Dashboard, survives refresh)
-  const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
+  // Shared period (scoped storage)
+  const { quarter, year } = usePersistedPeriod(getCurrentQuarter(), getCurrentYear());
 
-  // Persisted individual revenues (shared with Dashboard, survives refresh)
-  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues();
+  // Persisted global inputs for the selected period (shared with Dashboard, survives refresh)
+  const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs(quarter, year);
+
+  // Persisted individual revenues for the selected period (shared with Dashboard, survives refresh)
+  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues(quarter, year);
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null);

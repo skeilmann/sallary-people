@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Worker, Calculation, CalculationWithWorker, WorkerFormData } from './types';
 import type { CalculationPipeline, PipelineFormData } from './pipeline-types';
+import { pruneWorkerFromPeriodMaps } from './usePersistedInputs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -60,6 +61,9 @@ export async function deleteWorker(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) throw error;
+
+  // Purge orphan entries from period-scoped localStorage maps.
+  pruneWorkerFromPeriodMaps(id);
 }
 
 // ============ Calculations ============

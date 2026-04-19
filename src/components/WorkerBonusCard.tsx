@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +31,9 @@ interface WorkerBonusCardProps {
   // For workers with individual revenue source
   individualRevenue?: number;
   onIndividualRevenueChange?: (value: number) => void;
+  /** Per-period salary override (undefined means "use worker's configured salary"). */
+  salaryOverride?: number;
+  onSalaryOverrideChange?: (value: number) => void;
   /** When a pipeline is active, the commission is pre-computed by the engine */
   pipelineCommissionAmount?: number;
   /** When a pipeline is active, show the base amount used for this worker */
@@ -51,6 +54,8 @@ export function WorkerBonusCard({
   globalInputs,
   individualRevenue = 0,
   onIndividualRevenueChange,
+  salaryOverride,
+  onSalaryOverrideChange,
   pipelineCommissionAmount,
   pipelineBaseAmount,
   onSave,
@@ -59,14 +64,14 @@ export function WorkerBonusCard({
   const tCommon = useTranslations('common');
 
   const [isOpen, setIsOpen] = useState(false);
-  const [salary, setSalary] = useState(worker.formula_config.salaryAmount || 0);
   const [adjustmentPercent, setAdjustmentPercent] = useState(0);
   const [adjustmentNote, setAdjustmentNote] = useState('');
 
-  // Sync salary when worker config changes (e.g. after editing worker settings)
-  useEffect(() => {
-    setSalary(worker.formula_config.salaryAmount || 0);
-  }, [worker.formula_config.salaryAmount]);
+  // Salary is controlled: per-period override wins, otherwise fall back to worker config.
+  const salary = salaryOverride ?? worker.formula_config.salaryAmount ?? 0;
+  const handleSalaryChange = (value: number) => {
+    onSalaryOverrideChange?.(value);
+  };
 
   const config = worker.formula_config;
   const isIndividualRevenue = config.revenueSource === 'individual';
@@ -107,7 +112,6 @@ export function WorkerBonusCard({
 
   const handleCancel = () => {
     setIsOpen(false);
-    setSalary(worker.formula_config.salaryAmount || 0);
     setAdjustmentPercent(0);
     setAdjustmentNote('');
   };
@@ -272,7 +276,7 @@ export function WorkerBonusCard({
                   min="0"
                   step="100"
                   value={salary}
-                  onChange={(e) => setSalary(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => handleSalaryChange(parseFloat(e.target.value) || 0)}
                 />
               </div>
             )}

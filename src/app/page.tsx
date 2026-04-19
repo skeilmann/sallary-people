@@ -24,7 +24,12 @@ import { getWorkers, createCalculation, getCalculation, getDefaultPipeline } fro
 import { formatCurrency, calculateBonusWithGlobalInputs } from '@/lib/formulas';
 import type { CalculationPipeline, PipelineExecutionResult } from '@/lib/pipeline-types';
 import { executePipeline } from '@/lib/pipeline-engine';
-import { usePersistedGlobalInputs, usePersistedIndividualRevenues, usePersistedPeriod } from '@/lib/usePersistedInputs';
+import {
+  usePersistedGlobalInputs,
+  usePersistedIndividualRevenues,
+  usePersistedPeriod,
+  usePersistedSalaryOverrides,
+} from '@/lib/usePersistedInputs';
 
 const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 const years = Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i);
@@ -48,14 +53,17 @@ export default function DashboardPage() {
     getCurrentYear(),
   );
 
-  // Persisted global inputs (survives refresh, syncs across pages)
-  const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
+  // Persisted global inputs, scoped to the selected period
+  const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs(quarter, year);
 
   // Track saved calculations in this session
   const [savedWorkerIds, setSavedWorkerIds] = useState<Set<string>>(new Set());
 
-  // Persisted individual revenues per worker (survives refresh, syncs across pages)
-  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues();
+  // Persisted individual revenues per worker, scoped to the selected period
+  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues(quarter, year);
+
+  // Persisted per-worker salary overrides, scoped to the selected period
+  const { salaryOverrides, setSalaryOverrides } = usePersistedSalaryOverrides(quarter, year);
 
   // Historical calculations for comparison
   const [historicalCalculations, setHistoricalCalculations] = useState<CalculationWithWorker[]>([]);
@@ -88,6 +96,23 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
+  // Refresh workers when the page regains focus, so edits on /workers (commission %,
+  // salary, revenue source, etc.) reflect here immediately after navigating back.
+  useEffect(() => {
+    const onFocus = () => {
+      loadData();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') loadData();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
   const loadData = async () => {
     try {
       const [workersData, pipelineData] = await Promise.all([
@@ -103,11 +128,15 @@ export default function DashboardPage() {
     }
   };
 
+  // Resolve salary for a worker: per-period override wins over worker config.
+  const resolveSalary = (workerId: string, fallback: number | undefined) =>
+    salaryOverrides[workerId] ?? fallback ?? 0;
+
   // Build workerInputs map for pipeline engine
   const workerInputsMap: Record<string, { salary?: number; individualRevenue?: number }> = {};
   for (const worker of workers) {
     workerInputsMap[worker.id] = {
-      salary: worker.formula_config.salaryAmount,
+      salary: resolveSalary(worker.id, worker.formula_config.salaryAmount),
       individualRevenue: worker.formula_config.revenueSource === 'individual'
         ? (individualRevenues[worker.id] || 0)
         : undefined,
@@ -126,7 +155,7 @@ export default function DashboardPage() {
     : workers.reduce((sum, worker) => {
         const isIndividual = worker.formula_config.revenueSource === 'individual';
         return sum + calculateBonusWithGlobalInputs(worker.formula_config, globalInputs, {
-          salary: worker.formula_config.salaryAmount,
+          salary: resolveSalary(worker.id, worker.formula_config.salaryAmount),
           individualRevenue: isIndividual ? (individualRevenues[worker.id] || 0) : undefined,
         });
       }, 0);
@@ -452,6 +481,13 @@ export default function DashboardPage() {
                             individualRevenue={individualRevenues[worker.id] || 0}
                             onIndividualRevenueChange={(value) =>
                               setIndividualRevenues((prev) => ({
+                                ...prev,
+                                [worker.id]: value,
+                              }))
+                            }
+                            salaryOverride={salaryOverrides[worker.id]}
+                            onSalaryOverrideChange={(value) =>
+                              setSalaryOverrides((prev) => ({
                                 ...prev,
                                 [worker.id]: value,
                               }))

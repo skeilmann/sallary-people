@@ -21,6 +21,23 @@ function CalculatePageContent() {
     loadWorkers();
   }, []);
 
+  // Refresh workers when the page regains focus, so edits made on /workers
+  // (commission rate, salary, revenue source, etc.) appear without a hard reload.
+  useEffect(() => {
+    const onFocus = () => {
+      loadWorkers();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') loadWorkers();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
   const loadWorkers = async () => {
     try {
       const data = await getWorkers();
