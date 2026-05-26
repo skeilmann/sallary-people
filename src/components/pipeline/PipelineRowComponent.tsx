@@ -20,6 +20,7 @@ interface PipelineRowComponentProps {
   workers: Worker[];
   onRemoveRow: (rowId: string) => void;
   onRemoveItem: (itemId: string) => void;
+  onEditItem: (itemId: string) => void;
   onAddRowBelow: (atIndex: number) => void;
 }
 
@@ -30,6 +31,7 @@ export function PipelineRowComponent({
   workers,
   onRemoveRow,
   onRemoveItem,
+  onEditItem,
   onAddRowBelow,
 }: PipelineRowComponentProps) {
   const t = useTranslations('pipeline');
@@ -88,6 +90,7 @@ export function PipelineRowComponent({
                     commissionRate={worker?.formula_config.commissionRate}
                     isIndividualRevenue={worker?.formula_config.revenueSource === 'individual'}
                     onRemove={onRemoveItem}
+                    onEdit={onEditItem}
                   />
                 );
               })
@@ -96,7 +99,7 @@ export function PipelineRowComponent({
         </SortableContext>
 
         {/* Running total after */}
-        {rowResult && rowResult.runningTotalBefore !== rowResult.runningTotalAfter && (
+        {rowResult && (
           <div className="flex flex-col justify-center min-w-[100px] pl-3 border-l border-muted text-right">
             <span className="text-[10px] text-muted-foreground">{t('afterDeductions')}</span>
             <span className="text-xs font-mono font-medium">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -18,12 +18,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Plus, Save, RotateCcw, Info } from 'lucide-react';
+import { Plus, RotateCcw, Info, Check, Loader2, AlertCircle } from 'lucide-react';
 import { PipelineRowComponent } from './PipelineRowComponent';
 import { ItemPalette } from './ItemPalette';
 import { PipelinePreview } from './PipelinePreview';
 import { DraggablePipelineItem } from './DraggablePipelineItem';
+import { EditItemDialog } from './EditItemDialog';
 import type {
   PipelineRow,
   PipelineItem,
@@ -35,6 +35,7 @@ import {
   addRow,
   removeRow,
   removeItem,
+  updateItem,
   findItemRow,
   generatePipelineId,
   generateDefaultPipeline,
@@ -63,8 +64,67 @@ export function PipelineBuilder({
   // Pipeline state
   const [rows, setRows] = useState<PipelineRow[]>(pipeline?.rows ?? []);
   const [pipelineName, setPipelineName] = useState(pipeline?.name ?? 'Default Pipeline');
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // Hold the latest onSave through a ref so the autosave effect doesn't re-fire
+  // every time the parent's callback identity changes after a successful save.
+  const onSaveRef = useRef(onSave);
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
+  // Latest values, used by the unmount-flush so we save what's actually current
+  // even if React hasn't run the autosave effect for the very last edit yet.
+  const latestRowsRef = useRef(rows);
+  const latestNameRef = useRef(pipelineName);
+  useEffect(() => {
+    latestRowsRef.current = rows;
+  }, [rows]);
+  useEffect(() => {
+    latestNameRef.current = pipelineName;
+  }, [pipelineName]);
+
+  // Debounced autosave on every edit. Skips the initial mount so we don't save
+  // the just-loaded server state back to the server.
+  const isInitialMount = useRef(true);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      autoSaveTimerRef.current = null;
+      setAutoSaveStatus('saving');
+      try {
+        await onSaveRef.current(rows, pipelineName);
+        setAutoSaveStatus('saved');
+      } catch {
+        setAutoSaveStatus('error');
+      }
+    }, 600);
+  }, [rows, pipelineName]);
+
+  // Flush a pending save when the component unmounts (e.g. on tab navigation),
+  // otherwise the debounce timer is cleared and the last edit is lost — which
+  // was the original bug.
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+        void onSaveRef.current(latestRowsRef.current, latestNameRef.current);
+      }
+    };
+  }, []);
+
+  // Fade the "Saved" badge back to idle after a couple of seconds.
+  useEffect(() => {
+    if (autoSaveStatus !== 'saved') return;
+    const id = setTimeout(() => setAutoSaveStatus('idle'), 2000);
+    return () => clearTimeout(id);
+  }, [autoSaveStatus]);
 
   // Persisted global inputs (shared with Dashboard, survives refresh)
   const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
@@ -231,6 +291,29 @@ export function PipelineBuilder({
     setRows(prev => removeItem(prev, itemId));
   }, []);
 
+  // ==================== Edit Item ====================
+
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+
+  const editingItem = useMemo<PipelineItem | null>(() => {
+    if (!editingItemId) return null;
+    return rows.flatMap(r => r.items).find(i => i.id === editingItemId) ?? null;
+  }, [editingItemId, rows]);
+
+  const handleEditItem = useCallback((itemId: string) => {
+    setEditingItemId(itemId);
+  }, []);
+
+  const handleUpdateItem = useCallback((patch: Partial<PipelineItem>) => {
+    if (!editingItemId) return;
+    setRows(prev => updateItem(prev, editingItemId, patch));
+    setEditingItemId(null);
+  }, [editingItemId]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingItemId(null);
+  }, []);
+
   const handleAddItemFromPalette = useCallback((item: PipelineItem) => {
     // If no rows exist, create one first
     if (rows.length === 0) {
@@ -257,20 +340,6 @@ export function PipelineBuilder({
     setRows(defaultPipeline.rows);
     setPipelineName(defaultPipeline.name);
   }, [workers]);
-
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    setSaveMessage(null);
-    try {
-      await onSave(rows, pipelineName);
-      setSaveMessage(t('saved'));
-      setTimeout(() => setSaveMessage(null), 3000);
-    } catch {
-      setSaveMessage(t('saveFailed'));
-    } finally {
-      setSaving(false);
-    }
-  }, [rows, pipelineName, onSave, t]);
 
   // ==================== Render ====================
 
@@ -420,6 +489,7 @@ export function PipelineBuilder({
                 workers={workers}
                 onRemoveRow={handleRemoveRow}
                 onRemoveItem={handleRemoveItem}
+                onEditItem={handleEditItem}
                 onAddRowBelow={handleAddRow}
               />
             ))}
@@ -465,10 +535,26 @@ export function PipelineBuilder({
 
         {/* Actions */}
         <div className="flex items-center gap-3 pt-4 border-t">
-          <Button onClick={handleSave} disabled={saving}>
-            <Save className="w-4 h-4 mr-2" />
-            {saving ? t('saving') : t('save')}
-          </Button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground min-h-8" aria-live="polite">
+            {autoSaveStatus === 'saving' && (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>{t('saving')}</span>
+              </>
+            )}
+            {autoSaveStatus === 'saved' && (
+              <>
+                <Check className="w-3.5 h-3.5 text-green-600" />
+                <span>{t('saved')}</span>
+              </>
+            )}
+            {autoSaveStatus === 'error' && (
+              <>
+                <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+                <span className="text-destructive">{t('saveFailed')}</span>
+              </>
+            )}
+          </div>
           <Button variant="outline" onClick={handleReset}>
             <RotateCcw className="w-4 h-4 mr-2" />
             {t('reset')}
@@ -483,11 +569,6 @@ export function PipelineBuilder({
             >
               {t('deletePipeline')}
             </Button>
-          )}
-          {saveMessage && (
-            <Badge variant={saveMessage === t('saved') ? 'default' : 'destructive'} className="ml-auto">
-              {saveMessage}
-            </Badge>
           )}
         </div>
       </div>
@@ -507,6 +588,14 @@ export function PipelineBuilder({
 
         <PipelinePreview result={executionResult} />
       </div>
+
+      <EditItemDialog
+        item={editingItem}
+        rows={rows}
+        workers={workers}
+        onSave={handleUpdateItem}
+        onClose={handleCancelEdit}
+      />
     </div>
   );
 }

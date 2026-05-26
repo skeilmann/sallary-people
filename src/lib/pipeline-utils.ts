@@ -235,6 +235,20 @@ export function removeItem(
   }));
 }
 
+/** Update an item by id, merging the given patch into it. */
+export function updateItem(
+  rows: PipelineRow[],
+  itemId: string,
+  patch: Partial<PipelineItem>
+): PipelineRow[] {
+  return rows.map(r => ({
+    ...r,
+    items: r.items.map(i =>
+      i.id === itemId ? { ...i, ...patch } : i
+    ),
+  }));
+}
+
 /** Find which row an item belongs to */
 export function findItemRow(
   rows: PipelineRow[],

@@ -3,7 +3,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslations } from 'next-intl';
-import { X, GripVertical, Percent, DollarSign, User, Receipt } from 'lucide-react';
+import { X, Pencil, GripVertical, Percent, DollarSign, User, Receipt } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { PipelineItem, PipelineItemResult } from '@/lib/pipeline-types';
 import { formatCurrency } from '@/lib/formulas';
@@ -15,6 +15,7 @@ interface DraggablePipelineItemProps {
   commissionRate?: number;
   isIndividualRevenue?: boolean;
   onRemove?: (itemId: string) => void;
+  onEdit?: (itemId: string) => void;
   disabled?: boolean;
 }
 
@@ -39,6 +40,7 @@ export function DraggablePipelineItem({
   commissionRate,
   isIndividualRevenue,
   onRemove,
+  onEdit,
   disabled,
 }: DraggablePipelineItemProps) {
   const t = useTranslations('pipeline');
@@ -130,8 +132,25 @@ export function DraggablePipelineItem({
         </Badge>
       )}
 
+      {onEdit && !disabled && (
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(item.id);
+          }}
+          className="text-muted-foreground hover:text-primary transition-colors p-0.5"
+          title={t('editItem')}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
+
       {onRemove && !disabled && (
         <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onRemove(item.id);
