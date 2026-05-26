@@ -236,6 +236,7 @@
     "title": "Calculation Pipeline",
     "subtitle": "Drag and drop to customize the calculation order",
     "revenue": "Revenue",
+    "finalTotal": "Final Total",
     "tax": "Tax {index}",
     "salary": "{name} Salary",
     "workerCommission": "{name} ({rate}%)",

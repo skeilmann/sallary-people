@@ -236,6 +236,7 @@
     "title": "Pipeline di Calcolo",
     "subtitle": "Trascina e rilascia per personalizzare l'ordine dei calcoli",
     "revenue": "Fatturato",
+    "finalTotal": "Totale Finale",
     "tax": "Tassa {index}",
     "salary": "Stipendio {name}",
     "workerCommission": "{name} ({rate}%)",

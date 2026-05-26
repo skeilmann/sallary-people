@@ -13,7 +13,8 @@ import type { Worker, GlobalCalculationInputs } from './types';
  * The algorithm processes rows top-to-bottom:
  * 1. All items in a row receive the SAME running total (parallel execution)
  * 2. Deduction items (tax, salary, custom) subtract from the running total
- * 3. Worker commission items observe the running total but do NOT reduce it
+ * 3. Worker commission items observe the running total AND reduce it by
+ *    the commission amount paid out
  * 4. After all items in a row are processed, the running total is reduced
  *    by the sum of all deductions in that row
  */
@@ -81,8 +82,8 @@ export function executePipeline(
             };
           }
         }
+        totalDeductions += result.deductedAmount;
       } else {
-        // Accumulate deduction for running total reduction
         totalDeductions += result.deductedAmount;
       }
     }
@@ -213,7 +214,7 @@ function executeItem(
         type: 'worker_commission',
         label: `${workerName} (${config.commissionRate}%)`,
         inputAmount: baseAmount,
-        deductedAmount: 0, // Commissions do NOT reduce running total
+        deductedAmount: commission,
         commissionAmount: commission,
         workerName,
         workerId: worker.id,

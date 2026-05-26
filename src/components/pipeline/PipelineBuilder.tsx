@@ -464,9 +464,17 @@ export function PipelineBuilder({
         {globalInputs.totalRevenue > 0 && (
           <div className="flex items-center gap-3 px-4 py-3 bg-green-50 border-2 border-green-200 rounded-xl">
             <span className="text-sm font-medium text-green-800">{t('revenue')}</span>
-            <span className="text-lg font-mono font-bold text-green-800 ml-auto">
+            <span className="text-lg font-mono font-bold text-green-800">
               {formatCurrency(globalInputs.totalRevenue)}
             </span>
+            {executionResult && (
+              <div className="ml-auto flex items-center gap-2 pl-3 border-l border-green-300">
+                <span className="text-xs font-medium text-green-700">{t('finalTotal')}</span>
+                <span className="text-lg font-mono font-bold text-green-900">
+                  {formatCurrency(executionResult.finalRunningTotal)}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

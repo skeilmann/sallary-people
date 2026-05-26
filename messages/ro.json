@@ -236,6 +236,7 @@
     "title": "Flux de Calcul",
     "subtitle": "Trage și plasează pentru a personaliza ordinea calculelor",
     "revenue": "Venituri",
+    "finalTotal": "Total Final",
     "tax": "Impozit {index}",
     "salary": "Salariu {name}",
     "workerCommission": "{name} ({rate}%)",
