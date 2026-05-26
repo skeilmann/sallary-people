@@ -137,6 +137,28 @@ export default function DashboardPage() {
   // Combined total
   const totalBonus = currentWorkersTotal + historicalTotal;
 
+  // Sum of all salaries actually deducted across workers (only when deductSalary is on)
+  const totalSalariesDeducted = workers.reduce((sum, w) => {
+    if (!w.formula_config.deductSalary) return sum;
+    return sum + (w.formula_config.salaryAmount ?? 0);
+  }, 0);
+
+  // Global taxes applied once to total revenue (avoids per-worker double-counting)
+  const totalTaxesFromRevenue =
+    (globalInputs.totalRevenue * (globalInputs.taxRate1 + globalInputs.taxRate2)) / 100;
+
+  // Final revenue: what the company keeps after taxes, salaries, and bonuses.
+  // When a pipeline is active, its engine already tracks this authoritatively.
+  const finalRevenue = pipelineResult
+    ? pipelineResult.finalRunningTotal
+    : Math.max(
+        0,
+        globalInputs.totalRevenue
+          - totalTaxesFromRevenue
+          - totalSalariesDeducted
+          - currentWorkersTotal,
+      );
+
   const handleSaveBonus = async (data: {
     workerId: string;
     calculatedAmount: number;
@@ -256,7 +278,7 @@ export default function DashboardPage() {
               <CardTitle>{t('globalInputs')}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-6">
                 {/* Period Selection */}
                 <div className="space-y-2">
                   <Label>{t('period')}</Label>
@@ -360,9 +382,65 @@ export default function DashboardPage() {
                     {formatCurrency(totalBonus)}
                   </div>
                 </div>
+
+                {/* Final Revenue (what company keeps after deductions) */}
+                <div className="space-y-2">
+                  <Label>{t('finalRevenue')}</Label>
+                  <div className="text-2xl font-bold text-emerald-600">
+                    {formatCurrency(finalRevenue)}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Revenue Breakdown Card — only when no pipeline & revenue entered */}
+          {!pipelineResult && globalInputs.totalRevenue > 0 && (
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>{t('revenueBreakdown')}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {t('revenueBreakdownSubtitle')}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-w-md">
+                  <div className="flex justify-between text-sm">
+                    <span>{t('totalRevenue')}</span>
+                    <span>{formatCurrency(globalInputs.totalRevenue)}</span>
+                  </div>
+
+                  {totalTaxesFromRevenue > 0 && (
+                    <div className="flex justify-between text-sm text-red-600">
+                      <span>
+                        − {t('breakdownTaxes')} ({(globalInputs.taxRate1 + globalInputs.taxRate2).toFixed(1)}%)
+                      </span>
+                      <span>-{formatCurrency(totalTaxesFromRevenue)}</span>
+                    </div>
+                  )}
+
+                  {totalSalariesDeducted > 0 && (
+                    <div className="flex justify-between text-sm text-red-600">
+                      <span>− {t('breakdownSalaries')}</span>
+                      <span>-{formatCurrency(totalSalariesDeducted)}</span>
+                    </div>
+                  )}
+
+                  {currentWorkersTotal > 0 && (
+                    <div className="flex justify-between text-sm text-red-600">
+                      <span>− {t('breakdownBonuses')}</span>
+                      <span>-{formatCurrency(currentWorkersTotal)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between text-base font-bold border-t pt-2 text-emerald-700">
+                    <span>{t('finalRevenue')}</span>
+                    <span>{formatCurrency(finalRevenue)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Historical Calculations Section */}
           {historicalCalculations.length > 0 && (

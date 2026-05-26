@@ -160,6 +160,18 @@ export function WorkerBonusCard({
             className="cursor-pointer"
             onClick={() => setIsOpen(true)}
           >
+            {config.deductSalary && (
+              <p className="text-xs text-muted-foreground mb-1">
+                {t('revenueAfterSalary', {
+                  revenue: formatCurrency(
+                    breakdown?.totalRevenue ?? pipelineBaseAmount ?? globalInputs.totalRevenue,
+                  ),
+                  salary: formatCurrency(
+                    breakdown?.salaryAmount ?? worker.formula_config.salaryAmount ?? 0,
+                  ),
+                })}
+              </p>
+            )}
             <div className="text-3xl font-bold text-primary">
               {formatCurrency(calculatedAmount)}
             </div>
