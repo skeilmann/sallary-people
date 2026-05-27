@@ -258,3 +258,29 @@ export async function getRecentCalculations(
   const all = await getCalculations();
   return all.slice(0, limit);
 }
+
+/**
+ * Returns the most recent calculation for each worker, keyed by worker_id.
+ * Workers with no saved calculations are absent from the result — callers
+ * must treat lookups as possibly undefined, hence the `| undefined` value type.
+ * Used by the Dashboard "Saved Bonuses" section.
+ */
+export async function getLatestCalculationPerWorker(): Promise<
+  Record<string, CalculationWithWorker | undefined>
+> {
+  const calculations = readArray<Calculation>(CALCULATIONS_KEY);
+  const workers = readArray<Worker>(WORKERS_KEY);
+  const workersById = new Map(workers.map((w) => [w.id, w]));
+
+  // Most recent first, then keep the first one we see per worker.
+  const sorted = [...calculations].sort((a, b) =>
+    a.created_at < b.created_at ? 1 : -1,
+  );
+
+  const latestByWorker: Record<string, CalculationWithWorker | undefined> = {};
+  for (const calc of sorted) {
+    if (latestByWorker[calc.worker_id]) continue;
+    latestByWorker[calc.worker_id] = attachWorker(calc, workersById);
+  }
+  return latestByWorker;
+}
