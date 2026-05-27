@@ -6,6 +6,7 @@ import type {
   PipelineRowResult,
 } from './pipeline-types';
 import type { Worker, GlobalCalculationInputs } from './types';
+import { getEffectiveSalary } from './formulas';
 
 /**
  * Execute a calculation pipeline and return detailed results.
@@ -137,9 +138,12 @@ function executeItem(
     case 'salary': {
       const worker = item.workerId ? workerMap.get(item.workerId) : undefined;
       const workerName = worker?.name ?? 'Unknown';
-      const salaryAmount = item.workerId
+      const rawSalary = item.workerId
         ? (workerInputs[item.workerId]?.salary ?? worker?.formula_config.salaryAmount ?? 0)
         : 0;
+      const salaryAmount = worker
+        ? getEffectiveSalary(worker.formula_config, rawSalary)
+        : rawSalary;
       return {
         itemId: item.id,
         type: 'salary',
@@ -177,10 +181,10 @@ function executeItem(
 
       let baseAmount = rawBase;
 
-      // Deduct salary if configured
+      // Deduct salary if configured (monthly amounts get ×3 for the quarter)
       if (config.deductSalary) {
-        const salaryToDeduct = workerInputs[worker.id]?.salary ?? config.salaryAmount ?? 0;
-        baseAmount -= salaryToDeduct;
+        const rawSalary = workerInputs[worker.id]?.salary ?? config.salaryAmount ?? 0;
+        baseAmount -= getEffectiveSalary(config, rawSalary);
       }
 
       // Deduct per-worker tax if configured

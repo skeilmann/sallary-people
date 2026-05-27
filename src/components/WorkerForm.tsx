@@ -224,21 +224,50 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
               <Label htmlFor="deductSalary">{t('form.deductSalary')}</Label>
             </div>
             {config.deductSalary && (
-              <div className="ml-6 space-y-2">
-                <Label htmlFor="salaryAmount">{t('form.defaultSalary')}</Label>
-                <Input
-                  id="salaryAmount"
-                  type="number"
-                  min="0"
-                  step="100"
-                  value={config.salaryAmount || 0}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      salaryAmount: parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                />
+              <div className="ml-6 space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="salaryAmount">{t('form.defaultSalary')}</Label>
+                  <Input
+                    id="salaryAmount"
+                    type="number"
+                    min="0"
+                    step="100"
+                    value={config.salaryAmount || 0}
+                    onChange={(e) =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        salaryAmount: parseFloat(e.target.value) || 0,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="salaryPeriod">{t('form.salaryPeriod')}</Label>
+                  <Select
+                    value={config.salaryPeriod ?? 'quarterly'}
+                    onValueChange={(value) =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        salaryPeriod: value as 'monthly' | 'quarterly',
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="salaryPeriod">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="quarterly">
+                        {t('form.salaryPeriodQuarterly')}
+                      </SelectItem>
+                      <SelectItem value="monthly">
+                        {t('form.salaryPeriodMonthly')}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t('form.salaryPeriodHelp')}
+                  </p>
+                </div>
               </div>
             )}
           </div>

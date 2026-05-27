@@ -7,6 +7,10 @@ export interface FormulaConfig {
   // Salary deduction (per-worker amount)
   deductSalary?: boolean;
   salaryAmount?: number;
+  // Period the entered salaryAmount represents. 'quarterly' = full quarter (current behaviour);
+  // 'monthly' = per-month amount that gets multiplied ×3 for the quarterly bonus calc.
+  // Defaults to 'quarterly' to keep existing workers unchanged.
+  salaryPeriod?: 'monthly' | 'quarterly';
   // Apply tax deductions before commission calculation
   applyTaxDeductions?: boolean;
   // Per-worker tax rate (percentage). When set, overrides global taxRate1+taxRate2.
@@ -98,6 +102,7 @@ export const defaultFormulaConfig: FormulaConfig = {
   bonusThresholds: [],
   deductSalary: false,
   salaryAmount: 0,
+  salaryPeriod: 'quarterly',
   applyTaxDeductions: false,
   workerTaxRate: undefined,
   revenueSource: 'global',

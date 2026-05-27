@@ -1,6 +1,14 @@
 import type { FormulaConfig, CalculationInputs, GlobalCalculationInputs } from './types';
 
 /**
+ * The entered salary may represent either a single month or the full quarter.
+ * The bonus period is quarterly, so monthly amounts are multiplied by 3.
+ */
+export function getEffectiveSalary(config: FormulaConfig, rawSalary: number): number {
+  return config.salaryPeriod === 'monthly' ? rawSalary * 3 : rawSalary;
+}
+
+/**
  * Calculate bonus based on worker's formula configuration and inputs
  *
  * The calculation follows this sequence:
@@ -74,8 +82,8 @@ export function calculateBonusWithGlobalInputs(
 
   // Apply salary deduction if configured (per-worker)
   if (config.deductSalary) {
-    const salaryToDeduct = workerInputs?.salary ?? config.salaryAmount ?? 0;
-    netAmount -= salaryToDeduct;
+    const rawSalary = workerInputs?.salary ?? config.salaryAmount ?? 0;
+    netAmount -= getEffectiveSalary(config, rawSalary);
   }
 
   // Apply tax deductions if configured
@@ -126,7 +134,11 @@ export function getCalculationBreakdown(
   tax1Amount: number;
   tax2Amount: number;
   workerTaxAmount: number;
+  /** Effective salary deducted from revenue (after ×3 if monthly). */
   salaryAmount: number;
+  /** The amount as entered by the user (per month if salaryPeriod is monthly). */
+  rawSalaryAmount: number;
+  salaryPeriodMonthly: boolean;
   netAmount: number;
   bonusAmount: number;
 } {
@@ -142,11 +154,14 @@ export function getCalculationBreakdown(
   let tax1Amount = 0;
   let tax2Amount = 0;
   let workerTaxAmount = 0;
+  let rawSalaryAmount = 0;
   let salaryAmount = 0;
+  const salaryPeriodMonthly = config.salaryPeriod === 'monthly';
 
   // Salary first (matches calculation order in calculateBonusWithGlobalInputs)
   if (config.deductSalary) {
-    salaryAmount = workerInputs?.salary ?? config.salaryAmount ?? 0;
+    rawSalaryAmount = workerInputs?.salary ?? config.salaryAmount ?? 0;
+    salaryAmount = getEffectiveSalary(config, rawSalaryAmount);
     netAmount -= salaryAmount;
   }
 
@@ -173,6 +188,8 @@ export function getCalculationBreakdown(
     tax2Amount: Math.round(tax2Amount * 100) / 100,
     workerTaxAmount: Math.round(workerTaxAmount * 100) / 100,
     salaryAmount,
+    rawSalaryAmount,
+    salaryPeriodMonthly,
     netAmount: Math.round(netAmount * 100) / 100,
     bonusAmount,
   };

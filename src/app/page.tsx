@@ -21,7 +21,7 @@ import { HistoricalComparisonCard } from '@/components/HistoricalComparisonCard'
 import type { Worker, GlobalCalculationInputs, Quarter, CalculationInputs, CalculationWithWorker } from '@/lib/types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
 import { getWorkers, createCalculation, getCalculation, getDefaultPipeline } from '@/lib/supabase';
-import { formatCurrency, calculateBonusWithGlobalInputs } from '@/lib/formulas';
+import { formatCurrency, calculateBonusWithGlobalInputs, getEffectiveSalary } from '@/lib/formulas';
 import type { CalculationPipeline, PipelineExecutionResult } from '@/lib/pipeline-types';
 import { executePipeline } from '@/lib/pipeline-engine';
 import { usePersistedGlobalInputs, usePersistedIndividualRevenues, usePersistedPeriod } from '@/lib/usePersistedInputs';
@@ -137,10 +137,11 @@ export default function DashboardPage() {
   // Combined total
   const totalBonus = currentWorkersTotal + historicalTotal;
 
-  // Sum of all salaries actually deducted across workers (only when deductSalary is on)
+  // Sum of all salaries actually deducted across workers (only when deductSalary is on).
+  // Monthly amounts are multiplied ×3 to match the quarterly bonus period.
   const totalSalariesDeducted = workers.reduce((sum, w) => {
     if (!w.formula_config.deductSalary) return sum;
-    return sum + (w.formula_config.salaryAmount ?? 0);
+    return sum + getEffectiveSalary(w.formula_config, w.formula_config.salaryAmount ?? 0);
   }, 0);
 
   // Global taxes applied once to total revenue (avoids per-worker double-counting)

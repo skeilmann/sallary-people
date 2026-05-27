@@ -22,6 +22,7 @@ import {
   formatCurrency,
   calculateBonusWithGlobalInputs,
   getCalculationBreakdown,
+  getEffectiveSalary,
   calculateFinalAmount,
 } from '@/lib/formulas';
 
@@ -160,18 +161,28 @@ export function WorkerBonusCard({
             className="cursor-pointer"
             onClick={() => setIsOpen(true)}
           >
-            {config.deductSalary && (
-              <p className="text-xs text-muted-foreground mb-1">
-                {t('revenueAfterSalary', {
-                  revenue: formatCurrency(
-                    breakdown?.totalRevenue ?? pipelineBaseAmount ?? globalInputs.totalRevenue,
-                  ),
-                  salary: formatCurrency(
-                    breakdown?.salaryAmount ?? worker.formula_config.salaryAmount ?? 0,
-                  ),
-                })}
-              </p>
-            )}
+            {config.deductSalary && (() => {
+              const revenueDisplay = formatCurrency(
+                breakdown?.totalRevenue ?? pipelineBaseAmount ?? globalInputs.totalRevenue,
+              );
+              const rawSalary = breakdown?.rawSalaryAmount ?? worker.formula_config.salaryAmount ?? 0;
+              const effectiveSalary = breakdown?.salaryAmount ?? getEffectiveSalary(config, rawSalary);
+              const isMonthly = config.salaryPeriod === 'monthly';
+              return (
+                <p className="text-xs text-muted-foreground mb-1">
+                  {isMonthly
+                    ? t('revenueAfterSalaryMonthly', {
+                        revenue: revenueDisplay,
+                        salary: formatCurrency(rawSalary),
+                        effective: formatCurrency(effectiveSalary),
+                      })
+                    : t('revenueAfterSalary', {
+                        revenue: revenueDisplay,
+                        salary: formatCurrency(effectiveSalary),
+                      })}
+                </p>
+              );
+            })()}
             <div className="text-3xl font-bold text-primary">
               {formatCurrency(calculatedAmount)}
             </div>
@@ -220,7 +231,11 @@ export function WorkerBonusCard({
 
                   {config.deductSalary && (
                     <div className="flex justify-between text-sm text-red-600">
-                      <span>- {t('salary')}</span>
+                      <span>
+                        - {t('salary')}
+                        {breakdown.salaryPeriodMonthly &&
+                          ` (${formatCurrency(breakdown.rawSalaryAmount)}${t('perMonthShort')} × 3)`}
+                      </span>
                       <span>-{formatCurrency(breakdown.salaryAmount)}</span>
                     </div>
                   )}
@@ -277,7 +292,11 @@ export function WorkerBonusCard({
             {/* Salary Input (if applicable) */}
             {config.deductSalary && (
               <div className="space-y-2">
-                <Label htmlFor="salary">{t('salaryToDeduct')}</Label>
+                <Label htmlFor="salary">
+                  {config.salaryPeriod === 'monthly'
+                    ? t('salaryToDeductMonthly')
+                    : t('salaryToDeduct')}
+                </Label>
                 <Input
                   id="salary"
                   type="number"
