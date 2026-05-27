@@ -105,9 +105,14 @@ export function executePipeline(
     }
 
     // After the row completes, apply per-worker deductions for individual-revenue
-    // workers. A Salary card hits the matching worker's base directly; Tax cards
-    // hit every individual-revenue worker whose applyTaxDeductions flag is on,
-    // proportionally to their individualRevenue.
+    // workers:
+    //  - Salary card: hits the matching worker's base directly.
+    //  - Tax card: hits every individual-revenue worker whose applyTaxDeductions
+    //    flag is on, proportionally to their individualRevenue.
+    //  - Custom Deduction card (spending, vacation, supplies, etc.): treated as
+    //    a company-wide expense that reduces every individual-revenue worker's
+    //    base — fixed amounts subtract directly, percentages apply against
+    //    individualRevenue.
     for (const item of row.items) {
       if (item.type === 'salary' && item.workerId) {
         const w = workerMap.get(item.workerId);
@@ -122,6 +127,20 @@ export function executePipeline(
           if (w.formula_config.revenueSource === 'individual' && w.formula_config.applyTaxDeductions) {
             const indRev = workerInputs[w.id]?.individualRevenue ?? 0;
             const deduction = indRev * (taxRate / 100);
+            individualBases[w.id] = Math.max(0, (individualBases[w.id] ?? 0) - deduction);
+          }
+        }
+      } else if (item.type === 'custom_deduction') {
+        for (const w of workers) {
+          if (w.formula_config.revenueSource !== 'individual') continue;
+          let deduction = 0;
+          if (item.rate !== undefined && item.rate > 0) {
+            const indRev = workerInputs[w.id]?.individualRevenue ?? 0;
+            deduction = indRev * (item.rate / 100);
+          } else if (item.fixedAmount !== undefined && item.fixedAmount > 0) {
+            deduction = item.fixedAmount;
+          }
+          if (deduction > 0) {
             individualBases[w.id] = Math.max(0, (individualBases[w.id] ?? 0) - deduction);
           }
         }

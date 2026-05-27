@@ -177,12 +177,14 @@ export function CalculationHistory({
               <div>
                 <p className="text-sm text-muted-foreground mb-2">{t('detail.inputs')}</p>
                 <div className="bg-muted p-3 rounded space-y-1">
-                  {Object.entries(detailCalc.inputs).map(([key, value]) => (
-                    <div key={key} className="flex justify-between text-sm">
-                      <span className="capitalize">{key.replace('_', ' ')}</span>
-                      <span>{typeof value === 'number' ? formatCurrency(value) : value}</span>
-                    </div>
-                  ))}
+                  {Object.entries(detailCalc.inputs)
+                    .filter(([key]) => key !== 'returns' && key !== 'chargebacks' && key !== 'discounts')
+                    .map(([key, value]) => (
+                      <div key={key} className="flex justify-between text-sm">
+                        <span className="capitalize">{key.replace('_', ' ')}</span>
+                        <span>{typeof value === 'number' ? formatCurrency(value) : value}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
 

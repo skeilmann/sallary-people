@@ -25,7 +25,7 @@ export function ComparisonView({ calculations }: ComparisonViewProps) {
   // Get all unique input keys across all calculations
   const allInputKeys = Array.from(
     new Set(calculations.flatMap((c) => Object.keys(c.inputs)))
-  );
+  ).filter((key) => key !== 'returns' && key !== 'chargebacks' && key !== 'discounts');
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
