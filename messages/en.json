@@ -82,6 +82,8 @@
       "saveChanges": "Save Changes",
       "saving": "Saving...",
       "deductSalary": "Deduct salary from revenue",
+      "deductSalaryPipelineNote": "Pipeline mode: this checkbox is ignored. To deduct this worker's salary, place a Salary card above the Bonus card in the pipeline.",
+      "applyTaxDeductionsPipelineNote": "Pipeline mode: this checkbox is ignored. To apply taxes before the bonus, place Tax cards above the Bonus card in the pipeline.",
       "defaultSalary": "Default Salary Amount",
       "salaryPeriod": "Salary period",
       "salaryPeriodQuarterly": "Quarterly (full quarter amount)",

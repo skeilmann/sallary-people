@@ -235,6 +235,11 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
               />
               <Label htmlFor="deductSalary">{t('form.deductSalary')}</Label>
             </div>
+            {(config.revenueSource ?? 'global') === 'global' && (
+              <p className="text-xs text-muted-foreground ml-6">
+                {t('form.deductSalaryPipelineNote')}
+              </p>
+            )}
             {config.deductSalary && (
               <div className="ml-6 space-y-3">
                 <div className="space-y-2">
@@ -303,9 +308,15 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
               />
               <Label htmlFor="applyTaxDeductions">{t('form.applyTaxDeductions')}</Label>
             </div>
-            <p className="text-xs text-muted-foreground ml-6">
-              {t('form.taxDeductionsNote')}
-            </p>
+            {(config.revenueSource ?? 'global') === 'global' ? (
+              <p className="text-xs text-muted-foreground ml-6">
+                {t('form.applyTaxDeductionsPipelineNote')}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground ml-6">
+                {t('form.taxDeductionsNote')}
+              </p>
+            )}
             {config.applyTaxDeductions && (
               <div className="ml-6 mt-2 space-y-1">
                 <Label htmlFor="workerTaxRate" className="text-sm">

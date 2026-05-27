@@ -82,6 +82,8 @@
       "saveChanges": "Salvează Modificările",
       "saving": "Se salvează...",
       "deductSalary": "Deduce salariul din venituri",
+      "deductSalaryPipelineNote": "Mod pipeline: această bifă este ignorată. Pentru a deduce salariul, plasează un card Salariu deasupra cardului Bonus în pipeline.",
+      "applyTaxDeductionsPipelineNote": "Mod pipeline: această bifă este ignorată. Pentru a aplica taxe înainte de bonus, plasează carduri Taxă deasupra cardului Bonus în pipeline.",
       "defaultSalary": "Suma Salariului Implicit",
       "salaryPeriod": "Perioada salariului",
       "salaryPeriodQuarterly": "Trimestrial (suma pe tot trimestrul)",

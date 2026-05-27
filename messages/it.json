@@ -82,6 +82,8 @@
       "saveChanges": "Salva Modifiche",
       "saving": "Salvataggio...",
       "deductSalary": "Deduci stipendio dal fatturato",
+      "deductSalaryPipelineNote": "Modalità pipeline: questa casella viene ignorata. Per dedurre lo stipendio, posiziona una scheda Stipendio sopra la scheda Bonus nella pipeline.",
+      "applyTaxDeductionsPipelineNote": "Modalità pipeline: questa casella viene ignorata. Per applicare le tasse prima del bonus, posiziona schede Tassa sopra la scheda Bonus nella pipeline.",
       "defaultSalary": "Importo Stipendio Predefinito",
       "salaryPeriod": "Periodo dello stipendio",
       "salaryPeriodQuarterly": "Trimestrale (importo dell'intero trimestre)",

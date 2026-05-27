@@ -43,9 +43,22 @@ export function executePipeline(
   let runningTotal = globalInputs.totalRevenue;
   const rowResults: PipelineRowResult[] = [];
 
+  // Per-worker running base for individual-revenue workers. Starts at the
+  // worker's individualRevenue input. As we walk rows, cards that "apply" to
+  // an individual worker (their Salary card, Tax cards if applyTaxDeductions
+  // is on) reduce this base — but only after the row containing them, so
+  // same-row items still see the pre-row base.
+  const individualBases: Record<string, number> = {};
+  for (const worker of workers) {
+    if (worker.formula_config.revenueSource === 'individual') {
+      individualBases[worker.id] = workerInputs[worker.id]?.individualRevenue ?? 0;
+    }
+  }
+
   for (let rowIndex = 0; rowIndex < pipeline.rows.length; rowIndex++) {
     const row = pipeline.rows[rowIndex];
     const runningTotalBefore = runningTotal;
+    const individualBasesBefore = { ...individualBases };
     const itemResults: PipelineItemResult[] = [];
     let totalDeductions = 0;
 
@@ -53,6 +66,7 @@ export function executePipeline(
       const result = executeItem(
         item,
         runningTotalBefore,
+        individualBasesBefore,
         globalInputs,
         workerMap,
         workerInputs
@@ -67,7 +81,8 @@ export function executePipeline(
             (workerCommissions[result.workerId] || 0) + result.commissionAmount;
 
           // Store breakdown — use result.inputAmount which is the actual base
-          // (individual revenue for individual-source workers, running total otherwise)
+          // (per-worker individual base for individual-source workers, pipeline
+          // running total otherwise)
           const worker = result.workerId ? workerMap.get(result.workerId) : undefined;
           if (worker) {
             const config = worker.formula_config;
@@ -86,6 +101,30 @@ export function executePipeline(
         totalDeductions += result.deductedAmount;
       } else {
         totalDeductions += result.deductedAmount;
+      }
+    }
+
+    // After the row completes, apply per-worker deductions for individual-revenue
+    // workers. A Salary card hits the matching worker's base directly; Tax cards
+    // hit every individual-revenue worker whose applyTaxDeductions flag is on,
+    // proportionally to their individualRevenue.
+    for (const item of row.items) {
+      if (item.type === 'salary' && item.workerId) {
+        const w = workerMap.get(item.workerId);
+        if (w && w.formula_config.revenueSource === 'individual') {
+          const rawSalary = workerInputs[w.id]?.salary ?? w.formula_config.salaryAmount ?? 0;
+          const salaryAmount = getEffectiveSalary(w.formula_config, rawSalary);
+          individualBases[w.id] = Math.max(0, (individualBases[w.id] ?? 0) - salaryAmount);
+        }
+      } else if (item.type === 'tax') {
+        const taxRate = item.taxIndex === 1 ? globalInputs.taxRate1 : globalInputs.taxRate2;
+        for (const w of workers) {
+          if (w.formula_config.revenueSource === 'individual' && w.formula_config.applyTaxDeductions) {
+            const indRev = workerInputs[w.id]?.individualRevenue ?? 0;
+            const deduction = indRev * (taxRate / 100);
+            individualBases[w.id] = Math.max(0, (individualBases[w.id] ?? 0) - deduction);
+          }
+        }
       }
     }
 
@@ -116,6 +155,7 @@ export function executePipeline(
 function executeItem(
   item: PipelineItem,
   runningTotal: number,
+  individualBasesBefore: Record<string, number>,
   globalInputs: GlobalCalculationInputs,
   workerMap: Map<string, Worker>,
   workerInputs: Record<string, { salary?: number; individualRevenue?: number }>
@@ -171,31 +211,23 @@ function executeItem(
       const config = worker.formula_config;
       const workerName = worker.name;
 
-      // Determine the base amount for commission
-      // Individual-revenue workers use their own revenue, not the pipeline running total
-      // Then apply per-worker deductions (salary, tax) to get the net amount
+      // Determine the base amount for commission. Position drives the value
+      // in both modes — the only difference is which "running total" we read.
+      //
+      // 'global': company pipeline running total at this card's row. Cards
+      //   above (Tax, Salary, Expense) already reduced it.
+      // 'individual': per-worker running base starting from individualRevenue,
+      //   reduced by this worker's Salary card and (if applyTaxDeductions is
+      //   on) Tax cards that sit in earlier rows. Items in the same row see
+      //   the pre-row snapshot, matching the existing "same row = same base"
+      //   semantics.
+      //
+      // Either way, per-worker deductSalary / applyTaxDeductions / workerTaxRate
+      // are no longer applied directly here — pipeline cards drive deductions.
       const isIndividual = config.revenueSource === 'individual';
-      const rawBase = isIndividual
-        ? (workerInputs[worker.id]?.individualRevenue ?? 0)
+      let baseAmount = isIndividual
+        ? (individualBasesBefore[worker.id] ?? 0)
         : runningTotal;
-
-      let baseAmount = rawBase;
-
-      // Deduct salary if configured (monthly amounts get ×3 for the quarter)
-      if (config.deductSalary) {
-        const rawSalary = workerInputs[worker.id]?.salary ?? config.salaryAmount ?? 0;
-        baseAmount -= getEffectiveSalary(config, rawSalary);
-      }
-
-      // Deduct per-worker tax if configured
-      if (config.applyTaxDeductions) {
-        if (config.workerTaxRate != null && config.workerTaxRate > 0) {
-          baseAmount -= rawBase * (config.workerTaxRate / 100);
-        } else {
-          baseAmount -= rawBase * (globalInputs.taxRate1 / 100);
-          baseAmount -= rawBase * (globalInputs.taxRate2 / 100);
-        }
-      }
 
       baseAmount = Math.max(0, baseAmount);
 
