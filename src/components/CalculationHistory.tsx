@@ -12,13 +12,8 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import type { CalculationWithWorker } from '@/lib/types';
+import { CalculationDetailsModal } from './CalculationDetailsModal';
 import { formatCurrency } from '@/lib/formulas';
 
 interface CalculationHistoryProps {
@@ -155,74 +150,10 @@ export function CalculationHistory({
         </TableBody>
       </Table>
 
-      {/* Detail Modal */}
-      <Dialog open={!!detailCalc} onOpenChange={() => setDetailCalc(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('detail.title')}</DialogTitle>
-          </DialogHeader>
-          {detailCalc && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('detail.worker')}</p>
-                  <p className="font-medium">{detailCalc.worker?.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('detail.period')}</p>
-                  <p className="font-medium">{detailCalc.period}</p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">{t('detail.inputs')}</p>
-                <div className="bg-muted p-3 rounded space-y-1">
-                  {Object.entries(detailCalc.inputs)
-                    .filter(([key]) => key !== 'returns' && key !== 'chargebacks' && key !== 'discounts')
-                    .map(([key, value]) => (
-                      <div key={key} className="flex justify-between text-sm">
-                        <span className="capitalize">{key.replace('_', ' ')}</span>
-                        <span>{typeof value === 'number' ? formatCurrency(value) : value}</span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 pt-4 border-t">
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('detail.calculated')}</p>
-                  <p className="font-medium">{formatCurrency(detailCalc.calculated_amount)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('detail.adjustment')}</p>
-                  <p className={`font-medium ${detailCalc.adjustment_amount > 0 ? 'text-green-600' : detailCalc.adjustment_amount < 0 ? 'text-red-600' : ''}`}>
-                    {detailCalc.adjustment_amount !== 0
-                      ? `${detailCalc.adjustment_amount > 0 ? '+' : ''}${formatCurrency(detailCalc.adjustment_amount)}`
-                      : '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('detail.final')}</p>
-                  <p className="text-lg font-bold">{formatCurrency(detailCalc.final_amount)}</p>
-                </div>
-              </div>
-
-              {detailCalc.adjustment_note && (
-                <div className="pt-4 border-t">
-                  <p className="text-sm text-muted-foreground">{t('detail.adjustmentNote')}</p>
-                  <p className="text-sm mt-1 p-2 bg-muted rounded">
-                    {detailCalc.adjustment_note}
-                  </p>
-                </div>
-              )}
-
-              <div className="text-xs text-muted-foreground pt-2">
-                {t('detail.calculatedOn', { date: formatDate(detailCalc.created_at) })}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <CalculationDetailsModal
+        calculation={detailCalc}
+        onClose={() => setDetailCalc(null)}
+      />
     </>
   );
 }
