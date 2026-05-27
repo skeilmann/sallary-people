@@ -258,24 +258,24 @@ export async function getRecentCalculations(
 }
 
 /**
- * Returns the most recent calculation for each worker, keyed by worker_id.
- * Used by the "Saved Bonuses" section on the dashboard.
+ * Returns calculations for a given period, grouped by worker_id and sorted
+ * within each group by created_at DESC (latest first). Used by the dashboard's
+ * quarter-scoped "Saved Bonuses" section.
  */
-export async function getLatestCalculationPerWorker(): Promise<
-  Record<string, CalculationWithWorker | undefined>
-> {
+export async function getCalculationsByWorkerForPeriod(
+  period: string,
+): Promise<Record<string, CalculationWithWorker[]>> {
   const supabase = getSupabaseBrowserClient();
   const { data, error } = await supabase
     .from('calculations')
     .select(CALC_WITH_WORKER_SELECT)
+    .eq('period', period)
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  const result: Record<string, CalculationWithWorker | undefined> = {};
+  const result: Record<string, CalculationWithWorker[]> = {};
   for (const row of (data ?? []).map(normalizeCalcRow)) {
-    if (!result[row.worker_id]) {
-      result[row.worker_id] = row;
-    }
+    (result[row.worker_id] ??= []).push(row);
   }
   return result;
 }

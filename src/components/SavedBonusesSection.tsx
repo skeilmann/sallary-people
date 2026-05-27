@@ -9,12 +9,14 @@ import type { Worker, CalculationWithWorker } from '@/lib/types';
 
 interface SavedBonusesSectionProps {
   workers: Worker[];
-  latestByWorker: Record<string, CalculationWithWorker | undefined>;
+  calculationsByWorker: Record<string, CalculationWithWorker[]>;
+  period: string;
 }
 
 export function SavedBonusesSection({
   workers,
-  latestByWorker,
+  calculationsByWorker,
+  period,
 }: SavedBonusesSectionProps) {
   const t = useTranslations('dashboard');
   const [viewing, setViewing] = useState<CalculationWithWorker | null>(null);
@@ -25,8 +27,8 @@ export function SavedBonusesSection({
     <>
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>{t('savedBonuses')}</CardTitle>
-          <p className="text-sm text-muted-foreground">{t('savedBonusesSubtitle')}</p>
+          <CardTitle>{t('savedBonusesFor', { period })}</CardTitle>
+          <p className="text-sm text-muted-foreground">{t('savedBonusesForSubtitle')}</p>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -34,7 +36,7 @@ export function SavedBonusesSection({
               <SavedBonusRow
                 key={worker.id}
                 worker={worker}
-                calculation={latestByWorker[worker.id]}
+                calculations={calculationsByWorker[worker.id] ?? []}
                 onView={(calc) => setViewing(calc)}
               />
             ))}

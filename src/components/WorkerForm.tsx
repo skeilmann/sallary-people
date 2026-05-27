@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import type { Worker, FormulaConfig, BonusThreshold } from '@/lib/types';
+import type { Worker, FormulaConfig } from '@/lib/types';
 import { defaultFormulaConfig } from '@/lib/types';
 
 interface WorkerFormProps {
@@ -78,29 +78,6 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
       deductions: prev.deductions.includes(deduction)
         ? prev.deductions.filter((d) => d !== deduction)
         : [...prev.deductions, deduction],
-    }));
-  };
-
-  const addThreshold = () => {
-    setConfig((prev) => ({
-      ...prev,
-      bonusThresholds: [...prev.bonusThresholds, { above: 0, extraRate: 0 }],
-    }));
-  };
-
-  const updateThreshold = (index: number, field: keyof BonusThreshold, value: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      bonusThresholds: prev.bonusThresholds.map((threshold, i) =>
-        i === index ? { ...threshold, [field]: value } : threshold
-      ),
-    }));
-  };
-
-  const removeThreshold = (index: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      bonusThresholds: prev.bonusThresholds.filter((_, i) => i !== index),
     }));
   };
 
@@ -289,118 +266,6 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
             )}
           </div>
 
-          {/* Tax Deductions */}
-          <div className="space-y-2 p-3 border rounded-lg">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="applyTaxDeductions"
-                checked={config.applyTaxDeductions || false}
-                onChange={(e) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    applyTaxDeductions: e.target.checked,
-                    // Clear per-worker tax rate when disabling
-                    ...(e.target.checked ? {} : { workerTaxRate: undefined }),
-                  }))
-                }
-                className="rounded"
-              />
-              <Label htmlFor="applyTaxDeductions">{t('form.applyTaxDeductions')}</Label>
-            </div>
-            {(config.revenueSource ?? 'global') === 'global' ? (
-              <p className="text-xs text-muted-foreground ml-6">
-                {t('form.applyTaxDeductionsPipelineNote')}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground ml-6">
-                {t('form.taxDeductionsNote')}
-              </p>
-            )}
-            {config.applyTaxDeductions && (
-              <div className="ml-6 mt-2 space-y-1">
-                <Label htmlFor="workerTaxRate" className="text-sm">
-                  {t('form.workerTaxRate')}
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="workerTaxRate"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={config.workerTaxRate ?? ''}
-                    onChange={(e) =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        workerTaxRate: e.target.value ? parseFloat(e.target.value) : undefined,
-                      }))
-                    }
-                    placeholder={t('form.workerTaxRatePlaceholder')}
-                    className="w-32"
-                  />
-                  <span className="text-muted-foreground">%</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t('form.workerTaxRateNote')}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Bonus Thresholds */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>{t('form.bonusThresholds')}</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addThreshold}>
-                {t('form.addThreshold')}
-              </Button>
-            </div>
-
-            {config.bonusThresholds.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                {t('form.noThresholds')}
-              </p>
-            )}
-
-            {config.bonusThresholds.map((threshold, index) => (
-              <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded">
-                <span className="text-sm">{t('form.above')}</span>
-                <Input
-                  type="number"
-                  min="0"
-                  step="1000"
-                  className="w-24"
-                  value={threshold.above}
-                  onChange={(e) =>
-                    updateThreshold(index, 'above', parseFloat(e.target.value) || 0)
-                  }
-                />
-                <span className="text-sm">{t('form.add')}</span>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  className="w-16"
-                  value={threshold.extraRate}
-                  onChange={(e) =>
-                    updateThreshold(index, 'extraRate', parseFloat(e.target.value) || 0)
-                  }
-                />
-                <span className="text-sm">%</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600"
-                  onClick={() => removeThreshold(index)}
-                >
-                  ×
-                </Button>
-              </div>
-            ))}
-          </div>
         </div>
 
         <DialogFooter>

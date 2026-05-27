@@ -20,6 +20,7 @@ import {
 import { WorkerBonusCard } from '@/components/WorkerBonusCard';
 import { SavedBonusesSection } from '@/components/SavedBonusesSection';
 import { HistoricalComparisonCard } from '@/components/HistoricalComparisonCard';
+import { BulkSavePipelineModal, type BulkSaveFailure, type BulkSaveRow } from '@/components/BulkSavePipelineModal';
 import type { Worker, GlobalCalculationInputs, Quarter, CalculationInputs, CalculationWithWorker } from '@/lib/types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
 import {
@@ -27,7 +28,7 @@ import {
   createCalculation,
   getCalculation,
   getDefaultPipeline,
-  getLatestCalculationPerWorker,
+  getCalculationsByWorkerForPeriod,
 } from '@/lib/supabase';
 import { formatCurrency, calculateBonusWithGlobalInputs, getEffectiveSalary } from '@/lib/formulas';
 import type { CalculationPipeline, PipelineExecutionResult } from '@/lib/pipeline-types';
@@ -49,8 +50,9 @@ function DashboardPageContent() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
   const [pipeline, setPipeline] = useState<CalculationPipeline | null>(null);
-  const [latestByWorker, setLatestByWorker] = useState<
-    Record<string, CalculationWithWorker | undefined>
+  // Calcs for the currently selected period only, grouped by worker, newest first.
+  const [calculationsByWorker, setCalculationsByWorker] = useState<
+    Record<string, CalculationWithWorker[]>
   >({});
 
   // Persisted period selection (survives refresh, syncs across pages)
@@ -62,11 +64,20 @@ function DashboardPageContent() {
   // Persisted global inputs (survives refresh, syncs across pages)
   const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
 
-  // Track saved calculations in this session
-  const [savedWorkerIds, setSavedWorkerIds] = useState<Set<string>>(new Set());
-
-  // Persisted individual revenues per worker (survives refresh, syncs across pages)
+  // Persisted individual revenues per worker (survives refresh, syncs across pages).
+  // This is shared with /calculate, so we don't clobber it on quarter change —
+  // instead we keep a dashboard-local override (below).
   const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues();
+
+  // Dashboard-local override: when a saved calc exists for the selected quarter,
+  // its individual revenue is shown here. Survives within the dashboard only.
+  const [quarterIndividualRevenue, setQuarterIndividualRevenue] = useState<
+    Record<string, number>
+  >({});
+
+  // Bulk save (pipeline) selection + modal state
+  const [selectedForBulkSave, setSelectedForBulkSave] = useState<Set<string>>(new Set());
+  const [bulkSaveOpen, setBulkSaveOpen] = useState(false);
 
   // Historical calculations for comparison
   const [historicalCalculations, setHistoricalCalculations] = useState<CalculationWithWorker[]>([]);
@@ -95,26 +106,62 @@ function DashboardPageContent() {
     }
   };
 
+  // One-time load: workers + pipeline. Calculations are loaded by a separate
+  // effect that re-runs whenever the selected period changes.
   useEffect(() => {
-    loadData();
+    (async () => {
+      try {
+        const [workersData, pipelineData] = await Promise.all([
+          getWorkers(),
+          getDefaultPipeline().catch(() => null),
+        ]);
+        setWorkers(workersData);
+        setPipeline(pipelineData);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [workersData, pipelineData, latestData] = await Promise.all([
-        getWorkers(),
-        getDefaultPipeline().catch(() => null),
-        getLatestCalculationPerWorker(),
-      ]);
-      setWorkers(workersData);
-      setPipeline(pipelineData);
-      setLatestByWorker(latestData);
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
+  // Reload calculations whenever the selected period changes.
+  // The `cancelled` flag prevents a slow earlier-period response from
+  // overwriting a faster later-period response when the user clicks quickly.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getCalculationsByWorkerForPeriod(currentPeriod);
+        if (!cancelled) setCalculationsByWorker(data);
+      } catch (error) {
+        console.error('Failed to load calculations for period:', error);
+        if (!cancelled) setCalculationsByWorker({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPeriod]);
+
+  // When the period's saved data changes (load or after save), seed the
+  // dashboard-local quarter revenue override from saved values. We deliberately
+  // do not write to the cross-page persisted hook here.
+  useEffect(() => {
+    const seed: Record<string, number> = {};
+    for (const [workerId, calcs] of Object.entries(calculationsByWorker)) {
+      const latest = calcs[0];
+      const v = latest?.inputs.individualRevenue;
+      if (v !== undefined && v !== null) seed[workerId] = v;
     }
-  };
+    setQuarterIndividualRevenue(seed);
+  }, [calculationsByWorker]);
+
+  // Read order: quarter-specific saved value > cross-page persisted value > 0.
+  // This keeps switching quarters showing what was saved, while a fresh entry
+  // (in a quarter with no saves yet) still uses the value the user last typed.
+  const readIndividualRevenue = (workerId: string): number =>
+    quarterIndividualRevenue[workerId] ?? individualRevenues[workerId] ?? 0;
 
   // Build workerInputs map for pipeline engine
   const workerInputsMap: Record<string, { salary?: number; individualRevenue?: number }> = {};
@@ -122,7 +169,7 @@ function DashboardPageContent() {
     workerInputsMap[worker.id] = {
       salary: worker.formula_config.salaryAmount,
       individualRevenue: worker.formula_config.revenueSource === 'individual'
-        ? (individualRevenues[worker.id] || 0)
+        ? readIndividualRevenue(worker.id)
         : undefined,
     };
   }
@@ -140,7 +187,7 @@ function DashboardPageContent() {
         const isIndividual = worker.formula_config.revenueSource === 'individual';
         return sum + calculateBonusWithGlobalInputs(worker.formula_config, globalInputs, {
           salary: worker.formula_config.salaryAmount,
-          individualRevenue: isIndividual ? (individualRevenues[worker.id] || 0) : undefined,
+          individualRevenue: isIndividual ? readIndividualRevenue(worker.id) : undefined,
         });
       }, 0);
 
@@ -173,6 +220,11 @@ function DashboardPageContent() {
           - currentWorkersTotal,
       );
 
+  const refreshCalculationsForPeriod = async () => {
+    const refreshed = await getCalculationsByWorkerForPeriod(currentPeriod).catch(() => null);
+    if (refreshed) setCalculationsByWorker(refreshed);
+  };
+
   const handleSaveBonus = async (data: {
     workerId: string;
     calculatedAmount: number;
@@ -186,13 +238,11 @@ function DashboardPageContent() {
       const worker = workers.find((w) => w.id === data.workerId);
       if (!worker) return;
 
-      // Determine the base value based on revenue source
       const isIndividual = worker.formula_config.revenueSource === 'individual';
       const baseValue = isIndividual
         ? (data.individualRevenue || 0)
         : globalInputs.totalRevenue;
 
-      // Build inputs object for storage
       const inputs: CalculationInputs = {
         baseValue,
         salary: data.salary,
@@ -209,14 +259,62 @@ function DashboardPageContent() {
         final_amount: data.finalAmount,
       });
 
-      setSavedWorkerIds((prev) => new Set([...prev, data.workerId]));
-      // Refresh the "Saved Bonuses" section so the just-saved row appears immediately.
-      const refreshed = await getLatestCalculationPerWorker().catch(() => null);
-      if (refreshed) setLatestByWorker(refreshed);
+      await refreshCalculationsForPeriod();
     } catch (error) {
       console.error('Failed to save calculation:', error);
       alert(t('saveFailed'));
     }
+  };
+
+  const handleBulkSaveConfirm = async (rows: BulkSaveRow[]): Promise<BulkSaveFailure[]> => {
+    const results = await Promise.allSettled(
+      rows.map(async (r) => {
+        const worker = workers.find((w) => w.id === r.workerId);
+        if (!worker) throw new Error('worker not found');
+        const isIndividual = worker.formula_config.revenueSource === 'individual';
+        const baseValue = isIndividual
+          ? (r.individualRevenue ?? 0)
+          : globalInputs.totalRevenue;
+        const inputs: CalculationInputs = {
+          baseValue,
+          salary: r.salary,
+          individualRevenue: isIndividual ? r.individualRevenue : undefined,
+        };
+        await createCalculation({
+          worker_id: r.workerId,
+          period: currentPeriod,
+          inputs,
+          calculated_amount: r.calculatedAmount,
+          adjustment_amount: r.adjustmentAmount,
+          adjustment_note: r.adjustmentNote || null,
+          final_amount: r.finalAmount,
+        });
+        return r.workerId;
+      }),
+    );
+
+    const failures: BulkSaveFailure[] = [];
+    const succeededWorkerIds: string[] = [];
+    results.forEach((res, i) => {
+      const r = rows[i];
+      if (res.status === 'fulfilled') {
+        succeededWorkerIds.push(r.workerId);
+      } else {
+        failures.push({
+          workerId: r.workerId,
+          message: res.reason instanceof Error ? res.reason.message : String(res.reason),
+        });
+      }
+    });
+
+    await refreshCalculationsForPeriod();
+    // Drop succeeded workers from selection; keep failed ones for retry.
+    setSelectedForBulkSave((prev) => {
+      const next = new Set(prev);
+      for (const id of succeededWorkerIds) next.delete(id);
+      return next;
+    });
+    return failures;
   };
 
   const handleRemoveHistorical = (calculationId: string) => {
@@ -411,9 +509,13 @@ function DashboardPageContent() {
             </CardContent>
           </Card>
 
-          {/* Saved Bonuses (most recent per worker, across all periods) */}
+          {/* Saved Bonuses for the selected period only */}
           {workers.length > 0 && (
-            <SavedBonusesSection workers={workers} latestByWorker={latestByWorker} />
+            <SavedBonusesSection
+              workers={workers}
+              calculationsByWorker={calculationsByWorker}
+              period={currentPeriod}
+            />
           )}
 
           {/* Revenue Breakdown Card — only when no pipeline & revenue entered */}
@@ -539,9 +641,22 @@ function DashboardPageContent() {
                       const pipelineCommission = pipelineResult?.workerCommissions[worker.id];
                       const pipelineBreakdown = pipelineResult?.workerBreakdowns[worker.id];
 
+                      const latestForPeriod = calculationsByWorker[worker.id]?.[0];
+                      const savedSnapshot = latestForPeriod
+                        ? {
+                            id: latestForPeriod.id,
+                            salary: latestForPeriod.inputs.salary,
+                            adjustmentAmount: latestForPeriod.adjustment_amount,
+                            adjustmentNote: latestForPeriod.adjustment_note,
+                            calculatedAmount: latestForPeriod.calculated_amount,
+                          }
+                        : null;
+
+                      const hasSavedForPeriod = !!latestForPeriod;
+
                       return (
                         <div key={worker.id} className="relative">
-                          {savedWorkerIds.has(worker.id) && (
+                          {hasSavedForPeriod && (
                             <Badge className="absolute -top-2 -right-2 z-10 bg-green-600">
                               {t('saved')}
                             </Badge>
@@ -549,15 +664,30 @@ function DashboardPageContent() {
                           <WorkerBonusCard
                             worker={worker}
                             globalInputs={globalInputs}
-                            individualRevenue={individualRevenues[worker.id] || 0}
-                            onIndividualRevenueChange={(value) =>
+                            individualRevenue={readIndividualRevenue(worker.id)}
+                            onIndividualRevenueChange={(value) => {
                               setIndividualRevenues((prev) => ({
                                 ...prev,
                                 [worker.id]: value,
-                              }))
-                            }
+                              }));
+                              setQuarterIndividualRevenue((prev) => ({
+                                ...prev,
+                                [worker.id]: value,
+                              }));
+                            }}
                             pipelineCommissionAmount={pipelineCommission}
                             pipelineBaseAmount={pipelineBreakdown?.baseAmount}
+                            savedSnapshot={savedSnapshot}
+                            showSelectionCheckbox={!!pipelineResult}
+                            isSelected={selectedForBulkSave.has(worker.id)}
+                            onSelectionChange={(checked) => {
+                              setSelectedForBulkSave((prev) => {
+                                const next = new Set(prev);
+                                if (checked) next.add(worker.id);
+                                else next.delete(worker.id);
+                                return next;
+                              });
+                            }}
                             onSave={handleSaveBonus}
                           />
                         </div>
@@ -566,7 +696,48 @@ function DashboardPageContent() {
                   </div>
                 );
               })()}
+
+              {/* Sticky bulk-save action bar (pipeline mode + at least one selected) */}
+              {pipelineResult && selectedForBulkSave.size > 0 && (
+                <div className="sticky bottom-4 z-20 mt-4 flex justify-center">
+                  <div className="rounded-full border bg-background/95 shadow-lg backdrop-blur px-4 py-2 flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">
+                      {t('saveSelectedForPeriod', {
+                        count: selectedForBulkSave.size,
+                        period: currentPeriod,
+                      })}
+                    </span>
+                    <Button size="sm" onClick={() => setBulkSaveOpen(true)}>
+                      {tCommon('save')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSelectedForBulkSave(new Set())}
+                    >
+                      {tCommon('clear')}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </>
+          )}
+
+          {/* Bulk save confirmation modal */}
+          {pipelineResult && (
+            <BulkSavePipelineModal
+              open={bulkSaveOpen}
+              onClose={() => setBulkSaveOpen(false)}
+              workers={workers.filter((w) => selectedForBulkSave.has(w.id))}
+              pipelineResult={pipelineResult}
+              individualRevenues={(() => {
+                const m: Record<string, number> = {};
+                for (const w of workers) m[w.id] = readIndividualRevenue(w.id);
+                return m;
+              })()}
+              period={currentPeriod}
+              onConfirm={handleBulkSaveConfirm}
+            />
           )}
 
           {/* Quick Links */}

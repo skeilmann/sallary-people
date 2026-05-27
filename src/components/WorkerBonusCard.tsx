@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { Worker, GlobalCalculationInputs } from '@/lib/types';
 import {
   formatCurrency,
@@ -36,6 +37,22 @@ interface WorkerBonusCardProps {
   pipelineCommissionAmount?: number;
   /** When a pipeline is active, show the base amount used for this worker */
   pipelineBaseAmount?: number;
+  /**
+   * Latest saved calculation for the currently selected period, used to
+   * pre-fill the editing modal (salary, adjustment slider, note). When null
+   * or undefined, the card shows fresh defaults from the worker's config.
+   */
+  savedSnapshot?: {
+    id: string;
+    salary?: number;
+    adjustmentAmount: number;
+    adjustmentNote: string | null;
+    calculatedAmount: number;
+  } | null;
+  /** When true, shows the selection checkbox (typically pipeline-mode only). */
+  showSelectionCheckbox?: boolean;
+  isSelected?: boolean;
+  onSelectionChange?: (selected: boolean) => void;
   onSave: (data: {
     workerId: string;
     calculatedAmount: number;
@@ -54,6 +71,10 @@ export function WorkerBonusCard({
   onIndividualRevenueChange,
   pipelineCommissionAmount,
   pipelineBaseAmount,
+  savedSnapshot,
+  showSelectionCheckbox,
+  isSelected,
+  onSelectionChange,
   onSave,
 }: WorkerBonusCardProps) {
   const t = useTranslations('bonusCard');
@@ -68,6 +89,25 @@ export function WorkerBonusCard({
   useEffect(() => {
     setSalary(worker.formula_config.salaryAmount || 0);
   }, [worker.formula_config.salaryAmount]);
+
+  // Pre-fill editor state from the saved snapshot for the selected period.
+  // Effect runs only when the snapshot identity changes (per-quarter switch
+  // or after a fresh save), so it doesn't clobber in-progress local edits.
+  useEffect(() => {
+    if (savedSnapshot) {
+      setSalary(savedSnapshot.salary ?? worker.formula_config.salaryAmount ?? 0);
+      const pct =
+        savedSnapshot.calculatedAmount > 0
+          ? Math.round((savedSnapshot.adjustmentAmount / savedSnapshot.calculatedAmount) * 100)
+          : 0;
+      setAdjustmentPercent(Math.max(-20, Math.min(20, pct)));
+      setAdjustmentNote(savedSnapshot.adjustmentNote ?? '');
+    } else {
+      setAdjustmentPercent(0);
+      setAdjustmentNote('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedSnapshot?.id]);
 
   const config = worker.formula_config;
   const isIndividualRevenue = config.revenueSource === 'individual';
@@ -108,9 +148,20 @@ export function WorkerBonusCard({
 
   const handleCancel = () => {
     setIsOpen(false);
-    setSalary(worker.formula_config.salaryAmount || 0);
-    setAdjustmentPercent(0);
-    setAdjustmentNote('');
+    // Reset to the snapshot for this period when one exists; otherwise to fresh defaults.
+    if (savedSnapshot) {
+      setSalary(savedSnapshot.salary ?? worker.formula_config.salaryAmount ?? 0);
+      const pct =
+        savedSnapshot.calculatedAmount > 0
+          ? Math.round((savedSnapshot.adjustmentAmount / savedSnapshot.calculatedAmount) * 100)
+          : 0;
+      setAdjustmentPercent(Math.max(-20, Math.min(20, pct)));
+      setAdjustmentNote(savedSnapshot.adjustmentNote ?? '');
+    } else {
+      setSalary(worker.formula_config.salaryAmount || 0);
+      setAdjustmentPercent(0);
+      setAdjustmentNote('');
+    }
   };
 
   return (
@@ -119,22 +170,39 @@ export function WorkerBonusCard({
         className={`hover:shadow-md transition-shadow ${isIndividualRevenue ? 'border-blue-200' : ''}`}
       >
         <CardHeader className="pb-2">
-          <div className="flex items-start justify-between">
-            <CardTitle className="text-lg">
-              <Link href={`/workers?edit=${worker.id}`} className="hover:underline hover:text-primary transition-colors">
-                {worker.name}
-              </Link>
-            </CardTitle>
-            {isIndividualRevenue && (
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 text-xs">
-                {t('individualRevenue')}
-              </Badge>
-            )}
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2 min-w-0">
+              {showSelectionCheckbox && (
+                <Checkbox
+                  checked={!!isSelected}
+                  onCheckedChange={(checked) => onSelectionChange?.(checked === true)}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={t('selectForBulkSave')}
+                  className="mt-1"
+                />
+              )}
+              <CardTitle className="text-lg">
+                <Link href={`/workers?edit=${worker.id}`} className="hover:underline hover:text-primary transition-colors">
+                  {worker.name}
+                </Link>
+              </CardTitle>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {savedSnapshot && (
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 text-xs">
+                  {t('viewingSavedQuarter')}
+                </Badge>
+              )}
+              {isIndividualRevenue && (
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 text-xs">
+                  {t('individualRevenue')}
+                </Badge>
+              )}
+            </div>
           </div>
           <p className="text-sm text-muted-foreground">
             {config.commissionRate}% {t('commission')}
             {config.deductSalary && ` - ${t('minusSalary')}`}
-            {config.applyTaxDeductions && ` - ${t('minusTaxes')}`}
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -238,26 +306,6 @@ export function WorkerBonusCard({
                       </span>
                       <span>-{formatCurrency(breakdown.salaryAmount)}</span>
                     </div>
-                  )}
-
-                  {config.applyTaxDeductions && (
-                    config.workerTaxRate != null && config.workerTaxRate > 0 ? (
-                      <div className="flex justify-between text-sm text-red-600">
-                        <span>- {t('tax')} ({config.workerTaxRate}%)</span>
-                        <span>-{formatCurrency(breakdown.workerTaxAmount)}</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex justify-between text-sm text-red-600">
-                          <span>- {t('tax')} 1 ({globalInputs.taxRate1}%)</span>
-                          <span>-{formatCurrency(breakdown.tax1Amount)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm text-red-600">
-                          <span>- {t('tax')} 2 ({globalInputs.taxRate2}%)</span>
-                          <span>-{formatCurrency(breakdown.tax2Amount)}</span>
-                        </div>
-                      </>
-                    )
                   )}
 
                   <div className="flex justify-between text-sm font-medium border-t pt-2">

@@ -3,7 +3,6 @@ export interface FormulaConfig {
   baseMetric: 'revenue' | 'units_sold' | 'profit_margin';
   commissionRate: number; // percentage (e.g., 8 means 8%)
   deductions: ('returns' | 'chargebacks' | 'discounts')[];
-  bonusThresholds: BonusThreshold[];
   // Salary deduction (per-worker amount)
   deductSalary?: boolean;
   salaryAmount?: number;
@@ -11,18 +10,8 @@ export interface FormulaConfig {
   // 'monthly' = per-month amount that gets multiplied ×3 for the quarterly bonus calc.
   // Defaults to 'quarterly' to keep existing workers unchanged.
   salaryPeriod?: 'monthly' | 'quarterly';
-  // Apply tax deductions before commission calculation
-  applyTaxDeductions?: boolean;
-  // Per-worker tax rate (percentage). When set, overrides global taxRate1+taxRate2.
-  // e.g., 32 means 32% of revenue is deducted as tax.
-  workerTaxRate?: number;
   // Revenue source: 'global' (total company revenue) or 'individual' (worker's own sales)
   revenueSource?: 'global' | 'individual';
-}
-
-export interface BonusThreshold {
-  above: number; // threshold amount
-  extraRate: number; // additional percentage for amount above threshold
 }
 
 // Inputs provided during calculation
@@ -99,12 +88,9 @@ export const defaultFormulaConfig: FormulaConfig = {
   baseMetric: 'revenue',
   commissionRate: 5,
   deductions: [],
-  bonusThresholds: [],
   deductSalary: false,
   salaryAmount: 0,
   salaryPeriod: 'quarterly',
-  applyTaxDeductions: false,
-  workerTaxRate: undefined,
   revenueSource: 'global',
 };
 

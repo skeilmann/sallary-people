@@ -47,11 +47,6 @@ export function WorkerCard({ worker, onEdit, onDelete, onCalculate }: WorkerCard
                 -{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(config.salaryAmount)}
               </Badge>
             ) : null}
-            {config.applyTaxDeductions && config.workerTaxRate ? (
-              <Badge variant="outline" className="text-red-600 border-red-300 hidden lg:inline-flex">
-                -{config.workerTaxRate}%
-              </Badge>
-            ) : null}
           </div>
 
           {/* Actions */}

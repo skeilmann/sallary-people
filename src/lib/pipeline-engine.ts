@@ -4,6 +4,7 @@ import type {
   PipelineExecutionResult,
   PipelineItemResult,
   PipelineRowResult,
+  PipelineError,
 } from './pipeline-types';
 import type { Worker, GlobalCalculationInputs } from './types';
 import { getEffectiveSalary } from './formulas';
@@ -31,9 +32,10 @@ export function executePipeline(
     baseAmount: number;
     commissionRate: number;
     baseCommission: number;
-    thresholdBonuses: number;
+    nettedSalary?: number;
     totalCommission: number;
   }> = {};
+  const errors: PipelineError[] = [];
 
   // Initialize all workers with 0 commission
   for (const worker of workers) {
@@ -45,9 +47,9 @@ export function executePipeline(
 
   // Per-worker running base for individual-revenue workers. Starts at the
   // worker's individualRevenue input. As we walk rows, cards that "apply" to
-  // an individual worker (their Salary card, Tax cards if applyTaxDeductions
-  // is on) reduce this base — but only after the row containing them, so
-  // same-row items still see the pre-row base.
+  // an individual worker (their Salary card, any Tax card) reduce this base —
+  // but only after the row containing them, so same-row items still see the
+  // pre-row base.
   const individualBases: Record<string, number> = {};
   for (const worker of workers) {
     if (worker.formula_config.revenueSource === 'individual') {
@@ -59,10 +61,89 @@ export function executePipeline(
     const row = pipeline.rows[rowIndex];
     const runningTotalBefore = runningTotal;
     const individualBasesBefore = { ...individualBases };
+    // Snapshot of commissions that landed in PRIOR rows. Salary items with
+    // netAgainstBonus only net against bonuses already paid out before this row;
+    // a commission card in the same row as the salary card does not qualify.
+    const priorCommissions = { ...workerCommissions };
     const itemResults: PipelineItemResult[] = [];
+    // Salary items that successfully netted against a prior bonus. These do
+    // NOT reduce the individual base in the post-row pass below — the bonus
+    // payout already reduced the relevant balance.
+    const nettedSalaryItemIds = new Set<string>();
     let totalDeductions = 0;
 
     for (const item of row.items) {
+      // Handle netAgainstBonus salary items before delegating to executeItem,
+      // because the netting affects workerCommissions / running-total flow.
+      if (item.type === 'salary' && item.netAgainstBonus && item.workerId) {
+        const worker = workerMap.get(item.workerId);
+        const workerName = worker?.name ?? 'Unknown';
+        const rawSalary = workerInputs[item.workerId]?.salary
+          ?? worker?.formula_config.salaryAmount
+          ?? 0;
+        const salaryAmount = worker
+          ? getEffectiveSalary(worker.formula_config, rawSalary)
+          : rawSalary;
+        const priorBonus = priorCommissions[item.workerId] ?? 0;
+
+        if (priorBonus <= 0) {
+          errors.push({
+            itemId: item.id,
+            code: 'NET_NO_PRIOR_BONUS',
+            message: `${workerName}'s salary is set to net against bonus, but no commission card was found in an earlier row.`,
+          });
+        } else if (salaryAmount >= priorBonus) {
+          errors.push({
+            itemId: item.id,
+            code: 'NET_SALARY_NOT_LESS_THAN_BONUS',
+            message: `${workerName}'s salary (${salaryAmount}) must be strictly less than the prior bonus (${priorBonus}) to be netted against it.`,
+          });
+        } else {
+          // Apply netting: reduce the worker's recorded commission and treat
+          // the salary as a 0-impact item on the company running total.
+          const newTotal = Math.round((priorBonus - salaryAmount) * 100) / 100;
+          workerCommissions[item.workerId] = newTotal;
+          const existingBreakdown = workerBreakdowns[item.workerId];
+          if (existingBreakdown) {
+            existingBreakdown.nettedSalary =
+              (existingBreakdown.nettedSalary ?? 0) + salaryAmount;
+            existingBreakdown.totalCommission = newTotal;
+          }
+          // Annotate the MOST RECENT prior commission item for this worker
+          // so the UI can show the gross/net relationship without
+          // double-counting when a worker has multiple commission cards.
+          let mostRecentCommission: PipelineItemResult | undefined;
+          for (const prior of rowResults) {
+            for (const prevItem of prior.itemResults) {
+              if (
+                prevItem.type === 'worker_commission'
+                && prevItem.workerId === item.workerId
+              ) {
+                mostRecentCommission = prevItem;
+              }
+            }
+          }
+          if (mostRecentCommission) {
+            mostRecentCommission.nettedSalary =
+              (mostRecentCommission.nettedSalary ?? 0) + salaryAmount;
+          }
+          itemResults.push({
+            itemId: item.id,
+            type: 'salary',
+            label: `${workerName} Salary`,
+            inputAmount: runningTotalBefore,
+            deductedAmount: 0,
+            workerName,
+            workerId: item.workerId,
+            appliedNetting: true,
+            nettedSalary: salaryAmount,
+          });
+          nettedSalaryItemIds.add(item.id);
+          continue;
+        }
+        // Fall through to normal salary handling when netting was rejected.
+      }
+
       const result = executeItem(
         item,
         runningTotalBefore,
@@ -88,12 +169,10 @@ export function executePipeline(
             const config = worker.formula_config;
             const actualBase = result.inputAmount;
             const baseCommission = actualBase * (config.commissionRate / 100);
-            const thresholdBonuses = (result.commissionAmount ?? 0) - baseCommission;
             workerBreakdowns[result.workerId] = {
               baseAmount: actualBase,
               commissionRate: config.commissionRate,
               baseCommission: Math.round(baseCommission * 100) / 100,
-              thresholdBonuses: Math.round(thresholdBonuses * 100) / 100,
               totalCommission: result.commissionAmount ?? 0,
             };
           }
@@ -107,14 +186,15 @@ export function executePipeline(
     // After the row completes, apply per-worker deductions for individual-revenue
     // workers:
     //  - Salary card: hits the matching worker's base directly.
-    //  - Tax card: hits every individual-revenue worker whose applyTaxDeductions
-    //    flag is on, proportionally to their individualRevenue.
+    //  - Tax card: hits every individual-revenue worker, proportionally to
+    //    their individualRevenue.
     //  - Custom Deduction card (spending, vacation, supplies, etc.): treated as
     //    a company-wide expense that reduces every individual-revenue worker's
     //    base — fixed amounts subtract directly, percentages apply against
     //    individualRevenue.
     for (const item of row.items) {
       if (item.type === 'salary' && item.workerId) {
+        if (nettedSalaryItemIds.has(item.id)) continue;
         const w = workerMap.get(item.workerId);
         if (w && w.formula_config.revenueSource === 'individual') {
           const rawSalary = workerInputs[w.id]?.salary ?? w.formula_config.salaryAmount ?? 0;
@@ -124,7 +204,7 @@ export function executePipeline(
       } else if (item.type === 'tax') {
         const taxRate = item.taxIndex === 1 ? globalInputs.taxRate1 : globalInputs.taxRate2;
         for (const w of workers) {
-          if (w.formula_config.revenueSource === 'individual' && w.formula_config.applyTaxDeductions) {
+          if (w.formula_config.revenueSource === 'individual') {
             const indRev = workerInputs[w.id]?.individualRevenue ?? 0;
             const deduction = indRev * (taxRate / 100);
             individualBases[w.id] = Math.max(0, (individualBases[w.id] ?? 0) - deduction);
@@ -165,6 +245,7 @@ export function executePipeline(
     finalRunningTotal: runningTotal,
     workerCommissions,
     workerBreakdowns,
+    errors,
   };
 }
 
@@ -236,13 +317,9 @@ function executeItem(
       // 'global': company pipeline running total at this card's row. Cards
       //   above (Tax, Salary, Expense) already reduced it.
       // 'individual': per-worker running base starting from individualRevenue,
-      //   reduced by this worker's Salary card and (if applyTaxDeductions is
-      //   on) Tax cards that sit in earlier rows. Items in the same row see
-      //   the pre-row snapshot, matching the existing "same row = same base"
-      //   semantics.
-      //
-      // Either way, per-worker deductSalary / applyTaxDeductions / workerTaxRate
-      // are no longer applied directly here — pipeline cards drive deductions.
+      //   reduced by this worker's Salary card and Tax cards in earlier rows.
+      //   Items in the same row see the pre-row snapshot, matching the
+      //   existing "same row = same base" semantics.
       const isIndividual = config.revenueSource === 'individual';
       let baseAmount = isIndividual
         ? (individualBasesBefore[worker.id] ?? 0)
@@ -250,19 +327,7 @@ function executeItem(
 
       baseAmount = Math.max(0, baseAmount);
 
-      // Base commission
-      let commission = baseAmount * (config.commissionRate / 100);
-
-      // Tiered threshold bonuses
-      const sortedThresholds = [...config.bonusThresholds].sort((a, b) => a.above - b.above);
-      for (const threshold of sortedThresholds) {
-        if (baseAmount > threshold.above) {
-          const amountAbove = baseAmount - threshold.above;
-          commission += amountAbove * (threshold.extraRate / 100);
-        }
-      }
-
-      commission = Math.round(commission * 100) / 100;
+      const commission = Math.round(baseAmount * (config.commissionRate / 100) * 100) / 100;
 
       return {
         itemId: item.id,

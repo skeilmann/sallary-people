@@ -26,6 +26,16 @@ export interface PipelineItem {
 
   /** For 'custom_deduction' items: fixed dollar amount to deduct */
   fixedAmount?: number;
+
+  /**
+   * For 'salary' items: when true, and the card sits in a row AFTER the
+   * matching worker's commission card, AND the salary amount is strictly
+   * less than the commission already paid, the salary is netted against
+   * the worker's bonus payout instead of deducting from the company
+   * running total. If conditions are not met at execution time, the
+   * engine emits an error and falls back to a normal salary deduction.
+   */
+  netAgainstBonus?: boolean;
 }
 
 // ============ Pipeline Row ============
@@ -71,6 +81,30 @@ export interface PipelineItemResult {
   workerName?: string;
   /** Worker ID for linking */
   workerId?: string;
+  /**
+   * For 'salary' items with netAgainstBonus=true: true when the netting was
+   * actually applied (conditions met). When false/undefined, the salary
+   * behaved as a normal deduction.
+   */
+  appliedNetting?: boolean;
+  /**
+   * For 'salary' items: when netting was applied, the amount subtracted
+   * from the worker's previously-recorded commission.
+   * For 'worker_commission' items: when a later salary netted against this
+   * bonus, the amount that was netted out (gross commission =
+   * commissionAmount, net = commissionAmount - nettedSalary).
+   */
+  nettedSalary?: number;
+}
+
+/** Pipeline execution error (e.g. invalid netAgainstBonus configuration) */
+export interface PipelineError {
+  /** Item that caused the error */
+  itemId: string;
+  /** Machine-readable error code */
+  code: 'NET_NO_PRIOR_BONUS' | 'NET_SALARY_NOT_LESS_THAN_BONUS';
+  /** Human-readable description (English fallback; UI may localize via code) */
+  message: string;
 }
 
 /** Result of executing an entire row */
@@ -90,16 +124,19 @@ export interface PipelineExecutionResult {
   startingRevenue: number;
   rowResults: PipelineRowResult[];
   finalRunningTotal: number;
-  /** workerId → total commission amount (including threshold bonuses) */
+  /** workerId → total commission amount (already net of any applied salary netting) */
   workerCommissions: Record<string, number>;
   /** workerId → breakdown of how commission was computed */
   workerBreakdowns: Record<string, {
     baseAmount: number;
     commissionRate: number;
     baseCommission: number;
-    thresholdBonuses: number;
+    /** Salary amount that was netted against this worker's bonus, if any */
+    nettedSalary?: number;
     totalCommission: number;
   }>;
+  /** Validation/configuration errors raised during execution */
+  errors: PipelineError[];
 }
 
 // ============ Form types ============
