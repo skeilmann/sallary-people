@@ -32,6 +32,12 @@ interface WorkerFormProps {
 const METRICS: FormulaConfig['baseMetric'][] = ['revenue', 'units_sold', 'profit_margin'];
 const DEDUCTIONS: FormulaConfig['deductions'][number][] = ['returns', 'chargebacks', 'discounts'];
 
+// Feature flag: when false, the "Deductions (subtract from base)" buttons
+// (Returns / Chargebacks / Discounts) are hidden from the form and any
+// existing `deductions` values on a worker are reset on save.
+// Flip to true to restore the buttons.
+const SHOW_DEDUCTION_BUTTONS = false;
+
 export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
   const t = useTranslations('workers');
   const tCommon = useTranslations('common');
@@ -53,9 +59,13 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
   const handleSave = async () => {
     if (!name.trim()) return;
 
+    const configToSave: FormulaConfig = SHOW_DEDUCTION_BUTTONS
+      ? config
+      : { ...config, deductions: [] };
+
     setSaving(true);
     try {
-      await onSave({ name: name.trim(), formula_config: config });
+      await onSave({ name: name.trim(), formula_config: configToSave });
       onClose();
     } finally {
       setSaving(false);
@@ -189,22 +199,24 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
           </div>
 
           {/* Deductions */}
-          <div className="space-y-2">
-            <Label>{t('form.deductions')}</Label>
-            <div className="flex flex-wrap gap-2">
-              {DEDUCTIONS.map((deduction) => (
-                <Button
-                  key={deduction}
-                  type="button"
-                  variant={config.deductions.includes(deduction) ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => toggleDeduction(deduction)}
-                >
-                  {t(`deductionLabels.${deduction}`)}
-                </Button>
-              ))}
+          {SHOW_DEDUCTION_BUTTONS && (
+            <div className="space-y-2">
+              <Label>{t('form.deductions')}</Label>
+              <div className="flex flex-wrap gap-2">
+                {DEDUCTIONS.map((deduction) => (
+                  <Button
+                    key={deduction}
+                    type="button"
+                    variant={config.deductions.includes(deduction) ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => toggleDeduction(deduction)}
+                  >
+                    {t(`deductionLabels.${deduction}`)}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Salary Deduction */}
           <div className="space-y-2 p-3 border rounded-lg">
