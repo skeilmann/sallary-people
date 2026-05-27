@@ -41,10 +41,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMigration({ state: 'success', result });
       }
     } catch (err) {
-      console.error('Migration failed:', err);
+      const supabaseErr = err as { message?: string; details?: string; hint?: string; code?: string };
+      console.error('Migration failed:', {
+        message: supabaseErr?.message,
+        details: supabaseErr?.details,
+        hint: supabaseErr?.hint,
+        code: supabaseErr?.code,
+        raw: err,
+      });
       setMigration({
         state: 'error',
-        error: err instanceof Error ? err.message : String(err),
+        error: supabaseErr?.message ?? (err instanceof Error ? err.message : String(err)),
       });
     }
   }, []);
