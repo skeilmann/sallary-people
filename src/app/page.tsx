@@ -591,7 +591,7 @@ function DashboardPageContent() {
           {/* Worker Bonus Cards */}
           {workers.length > 0 && (
             <>
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-semibold">{t('workerBonuses')}</h2>
                   {pipeline && (
@@ -602,9 +602,47 @@ function DashboardPageContent() {
                     </Link>
                   )}
                 </div>
-                <Badge variant="outline">
-                  {currentPeriod}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {/* Bulk-save controls — only relevant when pipeline is active */}
+                  {pipelineResult && (() => {
+                    const eligibleIds = workers
+                      .filter((w) =>
+                        w.formula_config.revenueSource === 'individual' ||
+                        globalInputs.totalRevenue > 0,
+                      )
+                      .map((w) => w.id);
+                    const allSelected =
+                      eligibleIds.length > 0 &&
+                      eligibleIds.every((id) => selectedForBulkSave.has(id));
+                    return (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setSelectedForBulkSave(
+                              allSelected ? new Set() : new Set(eligibleIds),
+                            )
+                          }
+                          disabled={eligibleIds.length === 0}
+                        >
+                          {allSelected ? t('deselectAll') : t('selectAll')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => setBulkSaveOpen(true)}
+                          disabled={selectedForBulkSave.size === 0}
+                        >
+                          {t('saveSelectedForPeriod', {
+                            count: selectedForBulkSave.size,
+                            period: currentPeriod,
+                          })}
+                        </Button>
+                      </>
+                    );
+                  })()}
+                  <Badge variant="outline">{currentPeriod}</Badge>
+                </div>
               </div>
 
               {/* Show cards - workers with individual revenue don't need global revenue input */}
@@ -697,29 +735,6 @@ function DashboardPageContent() {
                 );
               })()}
 
-              {/* Sticky bulk-save action bar (pipeline mode + at least one selected) */}
-              {pipelineResult && selectedForBulkSave.size > 0 && (
-                <div className="sticky bottom-4 z-20 mt-4 flex justify-center">
-                  <div className="rounded-full border bg-background/95 shadow-lg backdrop-blur px-4 py-2 flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">
-                      {t('saveSelectedForPeriod', {
-                        count: selectedForBulkSave.size,
-                        period: currentPeriod,
-                      })}
-                    </span>
-                    <Button size="sm" onClick={() => setBulkSaveOpen(true)}>
-                      {tCommon('save')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSelectedForBulkSave(new Set())}
-                    >
-                      {tCommon('clear')}
-                    </Button>
-                  </div>
-                </div>
-              )}
             </>
           )}
 

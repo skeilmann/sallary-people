@@ -124,12 +124,29 @@ export async function createCalculation(
 ): Promise<Calculation> {
   const supabase = getSupabaseBrowserClient();
   const user_id = await requireUser();
+  const payload = { user_id, ...calculation };
   const { data, error } = await supabase
     .from('calculations')
-    .insert({ user_id, ...calculation })
+    .insert(payload)
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    // Surface PostgREST details so we can diagnose 400/409s. The default
+    // Error rendering omits .details/.hint/.code which usually have the
+    // real cause (NOT NULL violation, FK violation, etc.).
+    console.error('createCalculation failed', {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      payload,
+    });
+    throw new Error(
+      `${error.message}${error.details ? ` — ${error.details}` : ''}${
+        error.hint ? ` (hint: ${error.hint})` : ''
+      }`,
+    );
+  }
   return data as Calculation;
 }
 

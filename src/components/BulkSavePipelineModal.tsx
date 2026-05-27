@@ -47,7 +47,10 @@ interface BulkSavePipelineModalProps {
 }
 
 interface RowState {
-  adjustmentPercent: number;
+  // Dollar amount is the source of truth. The slider's percent is derived
+  // each render from this value + the worker's calculated amount, so editing
+  // either input updates the other consistently without feedback loops.
+  adjustmentAmount: number;
   adjustmentNote: string;
 }
 
@@ -92,7 +95,7 @@ export function BulkSavePipelineModal({
     if (open) {
       const next: Record<string, RowState> = {};
       for (const w of workers) {
-        next[w.id] = { adjustmentPercent: 0, adjustmentNote: '' };
+        next[w.id] = { adjustmentAmount: 0, adjustmentNote: '' };
       }
       setRowState(next);
       setFailures([]);
@@ -107,11 +110,15 @@ export function BulkSavePipelineModal({
   };
 
   const computeRow = (workerId: string, calculatedAmount: number) => {
-    const state = rowState[workerId] ?? { adjustmentPercent: 0, adjustmentNote: '' };
-    const adjustmentAmount =
-      Math.round(calculatedAmount * (state.adjustmentPercent / 100) * 100) / 100;
+    const state = rowState[workerId] ?? { adjustmentAmount: 0, adjustmentNote: '' };
+    const adjustmentAmount = Math.round(state.adjustmentAmount * 100) / 100;
+    // Percent shown on the slider is derived; clamp into the slider's range
+    // for display, but preserve the actual dollar amount even if it exceeds.
+    const rawPercent =
+      calculatedAmount > 0 ? Math.round((adjustmentAmount / calculatedAmount) * 100) : 0;
+    const sliderPercent = Math.max(-20, Math.min(20, rawPercent));
     const finalAmount = calculateFinalAmount(calculatedAmount, adjustmentAmount);
-    return { ...state, adjustmentAmount, finalAmount };
+    return { ...state, adjustmentAmount, sliderPercent, rawPercent, finalAmount };
   };
 
   const grandTotal = snapshot.reduce(
@@ -121,7 +128,7 @@ export function BulkSavePipelineModal({
 
   const missingNotes = snapshot.filter((s) => {
     const r = computeRow(s.worker.id, s.calculatedAmount);
-    return r.adjustmentPercent !== 0 && !r.adjustmentNote.trim();
+    return r.adjustmentAmount !== 0 && !r.adjustmentNote.trim();
   });
 
   const handleConfirm = async () => {
@@ -163,7 +170,7 @@ export function BulkSavePipelineModal({
               {snapshot.map((s) => {
                 const row = computeRow(s.worker.id, s.calculatedAmount);
                 const failure = failures.find((f) => f.workerId === s.worker.id);
-                const noteMissing = row.adjustmentPercent !== 0 && !row.adjustmentNote.trim();
+                const noteMissing = row.adjustmentAmount !== 0 && !row.adjustmentNote.trim();
                 return (
                   <li
                     key={s.worker.id}
@@ -190,25 +197,49 @@ export function BulkSavePipelineModal({
                       </div>
                     </div>
 
-                    <div className="mt-2 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3 items-center">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">
-                          {tBonusCard('adjustment')}: {row.adjustmentPercent > 0 ? '+' : ''}
-                          {row.adjustmentPercent}%
-                        </Label>
-                        <Slider
-                          value={[row.adjustmentPercent]}
-                          onValueChange={([v]) =>
-                            updateRow(s.worker.id, { adjustmentPercent: v })
-                          }
-                          min={-20}
-                          max={20}
-                          step={1}
-                          disabled={submitting}
-                          className="py-2"
-                        />
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3 items-start">
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">
+                            {tBonusCard('adjustment')}: {row.rawPercent > 0 ? '+' : ''}
+                            {row.rawPercent}%
+                          </Label>
+                          <Slider
+                            value={[row.sliderPercent]}
+                            onValueChange={([v]) => {
+                              const dollars =
+                                Math.round(s.calculatedAmount * (v / 100) * 100) / 100;
+                              updateRow(s.worker.id, { adjustmentAmount: dollars });
+                            }}
+                            min={-20}
+                            max={20}
+                            step={1}
+                            disabled={submitting}
+                            className="py-2"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">
+                            {t('adjustmentFixedLabel')}
+                          </Label>
+                          <Input
+                            type="number"
+                            step="1"
+                            value={row.adjustmentAmount === 0 ? '' : row.adjustmentAmount}
+                            onChange={(e) =>
+                              updateRow(s.worker.id, {
+                                adjustmentAmount: parseFloat(e.target.value) || 0,
+                              })
+                            }
+                            placeholder="0"
+                            disabled={submitting}
+                          />
+                        </div>
                       </div>
                       <div>
+                        <Label className="text-xs text-muted-foreground">
+                          {tBonusCard('adjustmentNote')}
+                        </Label>
                         <Input
                           type="text"
                           value={row.adjustmentNote}
@@ -216,11 +247,11 @@ export function BulkSavePipelineModal({
                             updateRow(s.worker.id, { adjustmentNote: e.target.value })
                           }
                           placeholder={
-                            row.adjustmentPercent !== 0
+                            row.adjustmentAmount !== 0
                               ? tBonusCard('adjustmentNotePlaceholder')
                               : ''
                           }
-                          disabled={row.adjustmentPercent === 0 || submitting}
+                          disabled={row.adjustmentAmount === 0 || submitting}
                           className={noteMissing ? 'border-red-400' : ''}
                         />
                         {noteMissing && (

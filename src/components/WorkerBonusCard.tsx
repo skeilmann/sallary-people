@@ -79,10 +79,13 @@ export function WorkerBonusCard({
 }: WorkerBonusCardProps) {
   const t = useTranslations('bonusCard');
   const tCommon = useTranslations('common');
+  const tDashboard = useTranslations('dashboard');
 
   const [isOpen, setIsOpen] = useState(false);
   const [salary, setSalary] = useState(worker.formula_config.salaryAmount || 0);
-  const [adjustmentPercent, setAdjustmentPercent] = useState(0);
+  // Dollar amount is the source of truth; the slider's percent is derived
+  // from this each render so editing either input updates the other.
+  const [adjustmentAmount, setAdjustmentAmount] = useState(0);
   const [adjustmentNote, setAdjustmentNote] = useState('');
 
   // Sync salary when worker config changes (e.g. after editing worker settings)
@@ -96,14 +99,10 @@ export function WorkerBonusCard({
   useEffect(() => {
     if (savedSnapshot) {
       setSalary(savedSnapshot.salary ?? worker.formula_config.salaryAmount ?? 0);
-      const pct =
-        savedSnapshot.calculatedAmount > 0
-          ? Math.round((savedSnapshot.adjustmentAmount / savedSnapshot.calculatedAmount) * 100)
-          : 0;
-      setAdjustmentPercent(Math.max(-20, Math.min(20, pct)));
+      setAdjustmentAmount(savedSnapshot.adjustmentAmount);
       setAdjustmentNote(savedSnapshot.adjustmentNote ?? '');
     } else {
-      setAdjustmentPercent(0);
+      setAdjustmentAmount(0);
       setAdjustmentNote('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,14 +118,19 @@ export function WorkerBonusCard({
   const calculatedAmount = isPipelineMode
     ? pipelineCommissionAmount
     : calculateBonusWithGlobalInputs(config, globalInputs, workerInputs);
-  const adjustmentAmount = Math.round(calculatedAmount * (adjustmentPercent / 100) * 100) / 100;
+  // Derive percent from the dollar amount; clamp slider to ±20% for display
+  // while preserving the raw percent in the label so larger fixed adjustments
+  // are still visible (e.g. "+35%" with the knob parked at the +20% limit).
+  const rawAdjustmentPercent =
+    calculatedAmount > 0 ? Math.round((adjustmentAmount / calculatedAmount) * 100) : 0;
+  const sliderAdjustmentPercent = Math.max(-20, Math.min(20, rawAdjustmentPercent));
   const finalAmount = calculateFinalAmount(calculatedAmount, adjustmentAmount);
 
   // Get breakdown for display (only used in non-pipeline mode dialog)
   const breakdown = isPipelineMode ? null : getCalculationBreakdown(config, globalInputs, workerInputs);
 
   const handleSave = () => {
-    if (adjustmentPercent !== 0 && !adjustmentNote.trim()) {
+    if (adjustmentAmount !== 0 && !adjustmentNote.trim()) {
       alert(t('adjustmentNoteRequired'));
       return;
     }
@@ -142,7 +146,7 @@ export function WorkerBonusCard({
     });
 
     setIsOpen(false);
-    setAdjustmentPercent(0);
+    setAdjustmentAmount(0);
     setAdjustmentNote('');
   };
 
@@ -151,15 +155,11 @@ export function WorkerBonusCard({
     // Reset to the snapshot for this period when one exists; otherwise to fresh defaults.
     if (savedSnapshot) {
       setSalary(savedSnapshot.salary ?? worker.formula_config.salaryAmount ?? 0);
-      const pct =
-        savedSnapshot.calculatedAmount > 0
-          ? Math.round((savedSnapshot.adjustmentAmount / savedSnapshot.calculatedAmount) * 100)
-          : 0;
-      setAdjustmentPercent(Math.max(-20, Math.min(20, pct)));
+      setAdjustmentAmount(savedSnapshot.adjustmentAmount);
       setAdjustmentNote(savedSnapshot.adjustmentNote ?? '');
     } else {
       setSalary(worker.formula_config.salaryAmount || 0);
-      setAdjustmentPercent(0);
+      setAdjustmentAmount(0);
       setAdjustmentNote('');
     }
   };
@@ -356,28 +356,48 @@ export function WorkerBonusCard({
               </div>
             )}
 
-            {/* Adjustment Slider */}
-            <div className="space-y-4">
+            {/* Adjustment — slider (% within ±20%) and fixed-dollar input.
+                Both inputs share the same underlying amount; editing either
+                updates the other. The dollar input can exceed ±20%; the
+                slider visually clamps but the % label shows the true value. */}
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>
-                  {t('adjustment')}: {adjustmentPercent > 0 ? '+' : ''}{adjustmentPercent}%
+                  {t('adjustment')}: {rawAdjustmentPercent > 0 ? '+' : ''}{rawAdjustmentPercent}%
                 </Label>
                 <span className="text-sm text-muted-foreground">
                   {adjustmentAmount > 0 ? '+' : ''}{formatCurrency(adjustmentAmount)}
                 </span>
               </div>
               <Slider
-                value={[adjustmentPercent]}
-                onValueChange={([value]) => setAdjustmentPercent(value)}
+                value={[sliderAdjustmentPercent]}
+                onValueChange={([value]) => {
+                  const dollars =
+                    Math.round(calculatedAmount * (value / 100) * 100) / 100;
+                  setAdjustmentAmount(dollars);
+                }}
                 min={-20}
                 max={20}
                 step={1}
-                className="py-4"
+                className="py-2"
               />
+              <div className="space-y-1">
+                <Label htmlFor="adjustment-fixed" className="text-xs text-muted-foreground">
+                  {tDashboard('adjustmentFixedLabel')}
+                </Label>
+                <Input
+                  id="adjustment-fixed"
+                  type="number"
+                  step="1"
+                  value={adjustmentAmount === 0 ? '' : adjustmentAmount}
+                  onChange={(e) => setAdjustmentAmount(parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                />
+              </div>
             </div>
 
             {/* Adjustment Note */}
-            {adjustmentPercent !== 0 && (
+            {adjustmentAmount !== 0 && (
               <div className="space-y-2">
                 <Label htmlFor="note">{t('adjustmentNote')}</Label>
                 <Textarea
