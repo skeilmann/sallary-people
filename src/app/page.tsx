@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { RequireAuth } from '@/components/RequireAuth';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,10 +18,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { WorkerBonusCard } from '@/components/WorkerBonusCard';
+import { SavedBonusesSection } from '@/components/SavedBonusesSection';
 import { HistoricalComparisonCard } from '@/components/HistoricalComparisonCard';
 import type { Worker, GlobalCalculationInputs, Quarter, CalculationInputs, CalculationWithWorker } from '@/lib/types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
-import { getWorkers, createCalculation, getCalculation, getDefaultPipeline } from '@/lib/supabase';
+import {
+  getWorkers,
+  createCalculation,
+  getCalculation,
+  getDefaultPipeline,
+  getLatestCalculationPerWorker,
+} from '@/lib/supabase';
 import { formatCurrency, calculateBonusWithGlobalInputs, getEffectiveSalary } from '@/lib/formulas';
 import type { CalculationPipeline, PipelineExecutionResult } from '@/lib/pipeline-types';
 import { executePipeline } from '@/lib/pipeline-engine';
@@ -29,7 +37,7 @@ import { usePersistedGlobalInputs, usePersistedIndividualRevenues, usePersistedP
 const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 const years = Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i);
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const t = useTranslations('dashboard');
   const tCommon = useTranslations('common');
   const tHistory = useTranslations('workerHistory');
@@ -41,6 +49,9 @@ export default function DashboardPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
   const [pipeline, setPipeline] = useState<CalculationPipeline | null>(null);
+  const [latestByWorker, setLatestByWorker] = useState<
+    Record<string, CalculationWithWorker | undefined>
+  >({});
 
   // Persisted period selection (survives refresh, syncs across pages)
   const { quarter, year, setQuarter, setYear } = usePersistedPeriod(
@@ -90,12 +101,14 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
-      const [workersData, pipelineData] = await Promise.all([
+      const [workersData, pipelineData, latestData] = await Promise.all([
         getWorkers(),
         getDefaultPipeline().catch(() => null),
+        getLatestCalculationPerWorker(),
       ]);
       setWorkers(workersData);
       setPipeline(pipelineData);
+      setLatestByWorker(latestData);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -197,6 +210,9 @@ export default function DashboardPage() {
       });
 
       setSavedWorkerIds((prev) => new Set([...prev, data.workerId]));
+      // Refresh the "Saved Bonuses" section so the just-saved row appears immediately.
+      const refreshed = await getLatestCalculationPerWorker().catch(() => null);
+      if (refreshed) setLatestByWorker(refreshed);
     } catch (error) {
       console.error('Failed to save calculation:', error);
       alert(t('saveFailed'));
@@ -395,6 +411,11 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
+          {/* Saved Bonuses (most recent per worker, across all periods) */}
+          {workers.length > 0 && (
+            <SavedBonusesSection workers={workers} latestByWorker={latestByWorker} />
+          )}
+
           {/* Revenue Breakdown Card — only when no pipeline & revenue entered */}
           {!pipelineResult && globalInputs.totalRevenue > 0 && (
             <Card className="mb-8">
@@ -560,5 +581,13 @@ export default function DashboardPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <RequireAuth>
+      <DashboardPageContent />
+    </RequireAuth>
   );
 }

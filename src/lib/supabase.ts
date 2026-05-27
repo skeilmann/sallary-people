@@ -1,105 +1,92 @@
+'use client';
+
 import type { Worker, Calculation, CalculationWithWorker, WorkerFormData } from './types';
 import type { CalculationPipeline, PipelineFormData } from './pipeline-types';
+import { getSupabaseBrowserClient } from './supabase-client';
 
-// ============ Storage keys ============
-
-const WORKERS_KEY = 'bonus_calculator_workers';
-const CALCULATIONS_KEY = 'bonus_calculator_calculations';
-const PIPELINE_STORAGE_KEY = 'bonus_calculator_pipeline';
-
-// ============ Internal helpers ============
-
-const isBrowser = (): boolean => typeof window !== 'undefined';
-
-function readArray<T>(key: string): T[] {
-  if (!isBrowser()) return [];
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeArray<T>(key: string, value: T[]): void {
-  if (!isBrowser()) return;
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function newId(): string {
-  if (isBrowser() && typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `id_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-const nowIso = (): string => new Date().toISOString();
-
-function attachWorker(
-  calc: Calculation,
-  workersById: Map<string, Worker>
-): CalculationWithWorker {
-  const worker = workersById.get(calc.worker_id);
-  return {
-    ...calc,
-    worker: worker
-      ? { id: worker.id, name: worker.name }
-      : { id: calc.worker_id, name: 'Unknown worker' },
-  };
+async function requireUser(): Promise<string> {
+  const supabase = getSupabaseBrowserClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) throw new Error('Not signed in');
+  return data.user.id;
 }
 
 // ============ Workers ============
 
 export async function getWorkers(): Promise<Worker[]> {
-  const workers = readArray<Worker>(WORKERS_KEY);
-  return [...workers].sort((a, b) => a.name.localeCompare(b.name));
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('workers')
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Worker[];
 }
 
 export async function getWorker(id: string): Promise<Worker | null> {
-  const workers = readArray<Worker>(WORKERS_KEY);
-  return workers.find((w) => w.id === id) ?? null;
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('workers')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Worker | null) ?? null;
 }
 
 export async function createWorker(worker: WorkerFormData): Promise<Worker> {
-  const workers = readArray<Worker>(WORKERS_KEY);
-  const now = nowIso();
-  const created: Worker = {
-    id: newId(),
-    name: worker.name,
-    formula_config: worker.formula_config,
-    created_at: now,
-    updated_at: now,
-  };
-  workers.push(created);
-  writeArray(WORKERS_KEY, workers);
-  return created;
+  const supabase = getSupabaseBrowserClient();
+  const user_id = await requireUser();
+  const { data, error } = await supabase
+    .from('workers')
+    .insert({
+      user_id,
+      name: worker.name,
+      formula_config: worker.formula_config,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Worker;
 }
 
 export async function updateWorker(
   id: string,
   worker: Partial<WorkerFormData>
 ): Promise<Worker> {
-  const workers = readArray<Worker>(WORKERS_KEY);
-  const index = workers.findIndex((w) => w.id === id);
-  if (index === -1) throw new Error(`Worker not found: ${id}`);
-
-  const updated: Worker = {
-    ...workers[index],
-    ...worker,
-    updated_at: nowIso(),
-  };
-  workers[index] = updated;
-  writeArray(WORKERS_KEY, workers);
-  return updated;
+  const supabase = getSupabaseBrowserClient();
+  await requireUser();
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (worker.name !== undefined) patch.name = worker.name;
+  if (worker.formula_config !== undefined) patch.formula_config = worker.formula_config;
+  const { data, error } = await supabase
+    .from('workers')
+    .update(patch)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Worker;
 }
 
 export async function deleteWorker(id: string): Promise<void> {
-  const workers = readArray<Worker>(WORKERS_KEY);
-  const filtered = workers.filter((w) => w.id !== id);
-  writeArray(WORKERS_KEY, filtered);
+  const supabase = getSupabaseBrowserClient();
+  await requireUser();
+  const { error } = await supabase.from('workers').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ============ Calculations ============
+
+const CALC_WITH_WORKER_SELECT = '*, worker:workers(id, name)';
+
+function normalizeCalcRow(row: unknown): CalculationWithWorker {
+  const r = row as Calculation & { worker: { id: string; name: string } | null };
+  return {
+    ...r,
+    worker: r.worker ?? { id: r.worker_id, name: 'Unknown worker' },
+  };
+}
 
 export async function getCalculations(filters?: {
   workerId?: string;
@@ -107,134 +94,135 @@ export async function getCalculations(filters?: {
   startDate?: string;
   endDate?: string;
 }): Promise<CalculationWithWorker[]> {
-  const calculations = readArray<Calculation>(CALCULATIONS_KEY);
-  const workers = readArray<Worker>(WORKERS_KEY);
-  const workersById = new Map(workers.map((w) => [w.id, w]));
-
-  let filtered = calculations;
-  if (filters?.workerId) {
-    filtered = filtered.filter((c) => c.worker_id === filters.workerId);
-  }
-  if (filters?.period) {
-    filtered = filtered.filter((c) => c.period === filters.period);
-  }
-  if (filters?.startDate) {
-    filtered = filtered.filter((c) => c.created_at >= filters.startDate!);
-  }
-  if (filters?.endDate) {
-    filtered = filtered.filter((c) => c.created_at <= filters.endDate!);
-  }
-
-  filtered.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  return filtered.map((c) => attachWorker(c, workersById));
+  const supabase = getSupabaseBrowserClient();
+  let query = supabase
+    .from('calculations')
+    .select(CALC_WITH_WORKER_SELECT)
+    .order('created_at', { ascending: false });
+  if (filters?.workerId) query = query.eq('worker_id', filters.workerId);
+  if (filters?.period) query = query.eq('period', filters.period);
+  if (filters?.startDate) query = query.gte('created_at', filters.startDate);
+  if (filters?.endDate) query = query.lte('created_at', filters.endDate);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []).map(normalizeCalcRow);
 }
 
 export async function getCalculation(id: string): Promise<CalculationWithWorker | null> {
-  const calculations = readArray<Calculation>(CALCULATIONS_KEY);
-  const calc = calculations.find((c) => c.id === id);
-  if (!calc) return null;
-
-  const workers = readArray<Worker>(WORKERS_KEY);
-  const workersById = new Map(workers.map((w) => [w.id, w]));
-  return attachWorker(calc, workersById);
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('calculations')
+    .select(CALC_WITH_WORKER_SELECT)
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? normalizeCalcRow(data) : null;
 }
 
 export async function createCalculation(
   calculation: Omit<Calculation, 'id' | 'created_at'>
 ): Promise<Calculation> {
-  const calculations = readArray<Calculation>(CALCULATIONS_KEY);
-  const created: Calculation = {
-    id: newId(),
-    created_at: nowIso(),
-    ...calculation,
-  };
-  calculations.push(created);
-  writeArray(CALCULATIONS_KEY, calculations);
-  return created;
+  const supabase = getSupabaseBrowserClient();
+  const user_id = await requireUser();
+  const { data, error } = await supabase
+    .from('calculations')
+    .insert({ user_id, ...calculation })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Calculation;
 }
 
 export async function deleteCalculation(id: string): Promise<void> {
-  const calculations = readArray<Calculation>(CALCULATIONS_KEY);
-  const filtered = calculations.filter((c) => c.id !== id);
-  writeArray(CALCULATIONS_KEY, filtered);
+  const supabase = getSupabaseBrowserClient();
+  await requireUser();
+  const { error } = await supabase.from('calculations').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ============ Pipelines ============
-// Single-pipeline model stored under PIPELINE_STORAGE_KEY (object, not array).
-
-function getLocalPipeline(): CalculationPipeline | null {
-  if (!isBrowser()) return null;
-  try {
-    const stored = localStorage.getItem(PIPELINE_STORAGE_KEY);
-    return stored ? (JSON.parse(stored) as CalculationPipeline) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveLocalPipeline(pipeline: CalculationPipeline): void {
-  if (!isBrowser()) return;
-  localStorage.setItem(PIPELINE_STORAGE_KEY, JSON.stringify(pipeline));
-}
-
-function removeLocalPipeline(): void {
-  if (!isBrowser()) return;
-  localStorage.removeItem(PIPELINE_STORAGE_KEY);
-}
+// Single pipeline per user — enforced by unique(user_id) constraint.
+// upsert({...}, { onConflict: 'user_id' }) lets us treat create/update uniformly.
 
 export async function getPipelines(): Promise<CalculationPipeline[]> {
-  const pipeline = getLocalPipeline();
+  const pipeline = await getDefaultPipeline();
   return pipeline ? [pipeline] : [];
 }
 
 export async function getDefaultPipeline(): Promise<CalculationPipeline | null> {
-  return getLocalPipeline();
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('calculation_pipelines')
+    .select('*')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as CalculationPipeline | null) ?? null;
 }
 
 export async function getPipeline(id: string): Promise<CalculationPipeline | null> {
-  const pipeline = getLocalPipeline();
-  return pipeline?.id === id ? pipeline : null;
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('calculation_pipelines')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as CalculationPipeline | null) ?? null;
 }
 
 export async function createPipeline(
   pipeline: PipelineFormData
 ): Promise<CalculationPipeline> {
-  const now = nowIso();
-  const created: CalculationPipeline = {
-    id: newId(),
-    name: pipeline.name,
-    rows: pipeline.rows,
-    created_at: now,
-    updated_at: now,
-  };
-  saveLocalPipeline(created);
-  return created;
+  const supabase = getSupabaseBrowserClient();
+  const user_id = await requireUser();
+  const { data, error } = await supabase
+    .from('calculation_pipelines')
+    .upsert(
+      {
+        user_id,
+        name: pipeline.name,
+        rows: pipeline.rows,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data as CalculationPipeline;
 }
 
 export async function updatePipeline(
-  id: string,
+  _id: string,
   updates: Partial<PipelineFormData>
 ): Promise<CalculationPipeline> {
-  const existing = getLocalPipeline();
-  const base: CalculationPipeline = existing ?? {
-    id,
-    name: 'Pipeline',
-    rows: [],
-    created_at: nowIso(),
-    updated_at: nowIso(),
+  const supabase = getSupabaseBrowserClient();
+  const user_id = await requireUser();
+  const existing = await getDefaultPipeline();
+  const payload = {
+    user_id,
+    name: updates.name ?? existing?.name ?? 'Default Pipeline',
+    rows: updates.rows ?? existing?.rows ?? [],
+    updated_at: new Date().toISOString(),
   };
-  const updated: CalculationPipeline = {
-    ...base,
-    ...updates,
-    id,
-    updated_at: nowIso(),
-  };
-  saveLocalPipeline(updated);
-  return updated;
+  const { data, error } = await supabase
+    .from('calculation_pipelines')
+    .upsert(payload, { onConflict: 'user_id' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as CalculationPipeline;
 }
 
 export async function deletePipeline(_id: string): Promise<void> {
-  removeLocalPipeline();
+  const supabase = getSupabaseBrowserClient();
+  const user_id = await requireUser();
+  const { error } = await supabase
+    .from('calculation_pipelines')
+    .delete()
+    .eq('user_id', user_id);
+  if (error) throw error;
 }
 
 // ============ Stats ============
@@ -243,44 +231,51 @@ export async function getQuarterlyStats(period: string): Promise<{
   totalAmount: number;
   calculationCount: number;
 }> {
-  const calculations = readArray<Calculation>(CALCULATIONS_KEY);
-  const matching = calculations.filter((c) => c.period === period);
-  const totalAmount = matching.reduce((sum, c) => sum + Number(c.final_amount), 0);
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('calculations')
+    .select('final_amount')
+    .eq('period', period);
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{ final_amount: number }>;
   return {
-    totalAmount,
-    calculationCount: matching.length,
+    totalAmount: rows.reduce((sum, r) => sum + Number(r.final_amount), 0),
+    calculationCount: rows.length,
   };
 }
 
 export async function getRecentCalculations(
   limit: number = 5
 ): Promise<CalculationWithWorker[]> {
-  const all = await getCalculations();
-  return all.slice(0, limit);
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('calculations')
+    .select(CALC_WITH_WORKER_SELECT)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map(normalizeCalcRow);
 }
 
 /**
  * Returns the most recent calculation for each worker, keyed by worker_id.
- * Workers with no saved calculations are absent from the result — callers
- * must treat lookups as possibly undefined, hence the `| undefined` value type.
- * Used by the Dashboard "Saved Bonuses" section.
+ * Used by the "Saved Bonuses" section on the dashboard.
  */
 export async function getLatestCalculationPerWorker(): Promise<
   Record<string, CalculationWithWorker | undefined>
 > {
-  const calculations = readArray<Calculation>(CALCULATIONS_KEY);
-  const workers = readArray<Worker>(WORKERS_KEY);
-  const workersById = new Map(workers.map((w) => [w.id, w]));
+  const supabase = getSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from('calculations')
+    .select(CALC_WITH_WORKER_SELECT)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
 
-  // Most recent first, then keep the first one we see per worker.
-  const sorted = [...calculations].sort((a, b) =>
-    a.created_at < b.created_at ? 1 : -1,
-  );
-
-  const latestByWorker: Record<string, CalculationWithWorker | undefined> = {};
-  for (const calc of sorted) {
-    if (latestByWorker[calc.worker_id]) continue;
-    latestByWorker[calc.worker_id] = attachWorker(calc, workersById);
+  const result: Record<string, CalculationWithWorker | undefined> = {};
+  for (const row of (data ?? []).map(normalizeCalcRow)) {
+    if (!result[row.worker_id]) {
+      result[row.worker_id] = row;
+    }
   }
-  return latestByWorker;
+  return result;
 }
