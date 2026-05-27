@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { RequireAuth } from '@/components/RequireAuth';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +14,7 @@ import { getWorkers, createWorker, updateWorker, deleteWorker } from '@/lib/supa
 
 const MAX_COMPARE_SELECTIONS = 3;
 
-export default function WorkersPage() {
+function WorkersPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const t = useTranslations('workers');
@@ -215,5 +216,13 @@ export default function WorkersPage() {
         onSave={handleSave}
       />
     </div>
+  );
+}
+
+export default function WorkersPage() {
+  return (
+    <RequireAuth>
+      <WorkersPageContent />
+    </RequireAuth>
   );
 }

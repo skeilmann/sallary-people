@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { RequireAuth } from '@/components/RequireAuth';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,7 +22,7 @@ import { formatCurrency } from '@/lib/formulas';
 const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 const years = Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i);
 
-export default function HistoryPage() {
+function HistoryPageContent() {
   const t = useTranslations('history');
   const tCommon = useTranslations('common');
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -256,5 +257,13 @@ export default function HistoryPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <RequireAuth>
+      <HistoryPageContent />
+    </RequireAuth>
   );
 }

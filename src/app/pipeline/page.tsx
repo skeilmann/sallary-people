@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { RequireAuth } from '@/components/RequireAuth';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { PipelineBuilder } from '@/components/pipeline/PipelineBuilder';
@@ -15,7 +16,7 @@ import {
 } from '@/lib/supabase';
 import { generateDefaultPipeline } from '@/lib/pipeline-utils';
 
-export default function PipelinePage() {
+function PipelinePageContent() {
   const t = useTranslations('pipeline');
   const tCommon = useTranslations('common');
 
@@ -130,5 +131,13 @@ export default function PipelinePage() {
         />
       )}
     </div>
+  );
+}
+
+export default function PipelinePage() {
+  return (
+    <RequireAuth>
+      <PipelinePageContent />
+    </RequireAuth>
   );
 }

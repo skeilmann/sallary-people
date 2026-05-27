@@ -18,7 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Plus, RotateCcw, Info, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, RotateCcw, Check, Loader2, AlertCircle } from 'lucide-react';
 import { PipelineRowComponent } from './PipelineRowComponent';
 import { ItemPalette } from './ItemPalette';
 import { PipelinePreview } from './PipelinePreview';
@@ -349,17 +349,6 @@ export function PipelineBuilder({
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
       {/* Main Pipeline Area */}
       <div className="space-y-6">
-        {/* Header with hints */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-2 rounded-lg">
-            <Info className="w-4 h-4 flex-shrink-0" />
-            <div>
-              <p>{t('sameRowHint')}</p>
-              <p>{t('dragHint')}</p>
-            </div>
-          </div>
-        </div>
-
         {/* Global Inputs for Preview */}
         <Card>
           <CardHeader className="pb-3">

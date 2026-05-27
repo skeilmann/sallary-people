@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { DynamicBonusForm } from '@/components/DynamicBonusForm';
 import type { Worker, CalculationInputs } from '@/lib/types';
 import { getWorkers, createCalculation } from '@/lib/supabase';
+import { RequireAuth } from '@/components/RequireAuth';
 
 function CalculatePageContent() {
   const router = useRouter();
@@ -112,8 +113,10 @@ function LoadingFallback() {
 
 export default function CalculatePage() {
   return (
-    <Suspense fallback={<LoadingFallback />}>
-      <CalculatePageContent />
-    </Suspense>
+    <RequireAuth>
+      <Suspense fallback={<LoadingFallback />}>
+        <CalculatePageContent />
+      </Suspense>
+    </RequireAuth>
   );
 }
