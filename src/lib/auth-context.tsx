@@ -86,7 +86,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string) => {
     const supabase = getSupabaseBrowserClient();
-    const { error } = await supabase.auth.signUp({ email, password });
+    // The confirmation email link must land back on the app's base path.
+    // Without emailRedirectTo, Supabase uses its project-level Site URL
+    // (e.g. http://localhost:3000/) and the user hits a 404 because the app
+    // is mounted at /sallary-people via next.config.ts basePath.
+    const emailRedirectTo =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/sallary-people/`
+        : undefined;
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo },
+    });
     if (error) throw error;
   }, []);
 
