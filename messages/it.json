@@ -314,6 +314,18 @@
     "noPipeline": "Nessuna pipeline configurata",
     "createPipeline": "Crea Pipeline",
     "deleteConfirm": "Eliminare questa pipeline? La dashboard tornerà ai calcoli per dipendente.",
-    "deletePipeline": "Elimina Pipeline"
+    "deletePipeline": "Elimina Pipeline",
+    "sharedPool": "Bonus Condiviso",
+    "addSharedPool": "+ Aggiungi Bonus Condiviso",
+    "sharedPoolLabel": "Bonus Condiviso {rate}% — {count} pers.",
+    "sharedPoolLabelField": "Etichetta (facoltativo)",
+    "sharedPoolLabelPlaceholder": "es., Bonus team vendite",
+    "sharedPoolRate": "Aliquota Bonus",
+    "sharedPoolParticipants": "Partecipanti (divisi equamente)",
+    "sharedPoolDeductSalaries": "Deduci gli stipendi trimestrali dei partecipanti dal bonus",
+    "sharedPoolDeductSalariesHint": "Somma lo stipendio di ogni partecipante (×3 se mensile) e lo sottrae dal bonus lordo prima della divisione.",
+    "sharedPoolFormulaPool": "Bonus",
+    "sharedPoolFormulaSalaries": "stipendi",
+    "each": "cad."
   }
 }

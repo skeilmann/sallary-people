@@ -314,6 +314,18 @@
     "noPipeline": "Niciun flux configurat",
     "createPipeline": "Creează Flux",
     "deleteConfirm": "Ștergi acest flux? Panoul principal va reveni la calculele per angajat.",
-    "deletePipeline": "Șterge Flux"
+    "deletePipeline": "Șterge Flux",
+    "sharedPool": "Bonus Comun",
+    "addSharedPool": "+ Adaugă Bonus Comun",
+    "sharedPoolLabel": "Bonus Comun {rate}% — {count} pers.",
+    "sharedPoolLabelField": "Etichetă (opțional)",
+    "sharedPoolLabelPlaceholder": "ex., Bonus echipă vânzări",
+    "sharedPoolRate": "Cotă Bonus",
+    "sharedPoolParticipants": "Participanți (împărțit egal)",
+    "sharedPoolDeductSalaries": "Deduce salariile trimestriale ale participanților din bonus",
+    "sharedPoolDeductSalariesHint": "Adună salariile fiecărui participant (×3 dacă sunt lunare) și le scade din bonusul brut înainte de împărțire.",
+    "sharedPoolFormulaPool": "Bonus",
+    "sharedPoolFormulaSalaries": "salarii",
+    "each": "fiecare"
   }
 }

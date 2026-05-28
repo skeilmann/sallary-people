@@ -314,6 +314,18 @@
     "noPipeline": "No pipeline configured",
     "createPipeline": "Create Pipeline",
     "deleteConfirm": "Delete this pipeline? The dashboard will revert to per-worker calculations.",
-    "deletePipeline": "Delete Pipeline"
+    "deletePipeline": "Delete Pipeline",
+    "sharedPool": "Shared Pool",
+    "addSharedPool": "+ Add Shared Pool",
+    "sharedPoolLabel": "Shared Pool {rate}% — {count} ppl",
+    "sharedPoolLabelField": "Label (optional)",
+    "sharedPoolLabelPlaceholder": "e.g., Sales team pool",
+    "sharedPoolRate": "Pool Rate",
+    "sharedPoolParticipants": "Participants (split equally)",
+    "sharedPoolDeductSalaries": "Deduct participants' quarterly salaries from the pool",
+    "sharedPoolDeductSalariesHint": "Sums each participant's salary (×3 if monthly) and subtracts it from the gross pool before splitting.",
+    "sharedPoolFormulaPool": "Pool",
+    "sharedPoolFormulaSalaries": "salaries",
+    "each": "each"
   }
 }

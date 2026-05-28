@@ -3,7 +3,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslations } from 'next-intl';
-import { X, Pencil, GripVertical, Percent, DollarSign, User, Receipt } from 'lucide-react';
+import { X, Pencil, GripVertical, Percent, DollarSign, User, Users, Receipt } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { PipelineItem, PipelineItemResult } from '@/lib/pipeline-types';
 import { formatCurrency } from '@/lib/formulas';
@@ -23,6 +23,7 @@ const typeColors: Record<string, string> = {
   tax: 'bg-red-50 border-red-200 text-red-800',
   salary: 'bg-orange-50 border-orange-200 text-orange-800',
   worker_commission: 'bg-blue-50 border-blue-200 text-blue-800',
+  shared_pool_commission: 'bg-indigo-50 border-indigo-200 text-indigo-800',
   custom_deduction: 'bg-purple-50 border-purple-200 text-purple-800',
 };
 
@@ -30,6 +31,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   tax: <Percent className="w-3.5 h-3.5" />,
   salary: <DollarSign className="w-3.5 h-3.5" />,
   worker_commission: <User className="w-3.5 h-3.5" />,
+  shared_pool_commission: <Users className="w-3.5 h-3.5" />,
   custom_deduction: <Receipt className="w-3.5 h-3.5" />,
 };
 
@@ -74,6 +76,13 @@ export function DraggablePipelineItem({
         return workerName && commissionRate !== undefined
           ? t('workerCommission', { name: workerName, rate: commissionRate })
           : 'Commission';
+      case 'shared_pool_commission': {
+        const rate = item.poolRate ?? 0;
+        const n = item.participantIds?.length ?? 0;
+        return rate
+          ? t('sharedPoolLabel', { rate, count: n })
+          : t('sharedPool');
+      }
       case 'custom_deduction':
         return item.label ?? t('customDeduction');
       default:
@@ -87,6 +96,9 @@ export function DraggablePipelineItem({
       const netted = result.nettedSalary ?? 0;
       const netAmount = result.commissionAmount - netted;
       return `${t('earns')} ${formatCurrency(netAmount)}`;
+    }
+    if (item.type === 'shared_pool_commission' && result.perPerson !== undefined) {
+      return `${formatCurrency(result.perPerson)} ${t('each')}`;
     }
     if (item.type === 'salary' && result.nettedSalary !== undefined) {
       // Salary was netted against a prior bonus — the company didn't spend
@@ -132,6 +144,7 @@ export function DraggablePipelineItem({
           {result && (
             <span className={`text-[10px] font-mono ${
               item.type === 'worker_commission'
+                || item.type === 'shared_pool_commission'
                 || (item.type === 'salary' && result?.addedSalary !== undefined)
                 ? 'text-blue-600'
                 : 'text-red-600'

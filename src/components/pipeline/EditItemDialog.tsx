@@ -100,6 +100,20 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
   const [customAmount, setCustomAmount] = useState(
     item.type === 'custom_deduction' ? item.fixedAmount ?? 0 : 0
   );
+  const [poolRate, setPoolRate] = useState(
+    item.type === 'shared_pool_commission' ? item.poolRate ?? 0 : 0
+  );
+  const [participantIds, setParticipantIds] = useState<string[]>(
+    item.type === 'shared_pool_commission' ? item.participantIds ?? [] : []
+  );
+  const [deductParticipantSalaries, setDeductParticipantSalaries] = useState(
+    item.type === 'shared_pool_commission'
+      ? item.deductParticipantSalaries ?? false
+      : false
+  );
+  const [poolLabel, setPoolLabel] = useState(
+    item.type === 'shared_pool_commission' ? item.label ?? '' : ''
+  );
 
   // Constraint sets — "placed elsewhere" excludes the current item being edited
   const otherItems = rows.flatMap(r => r.items).filter(i => i.id !== item.id);
@@ -127,6 +141,13 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
         label: customLabel.trim(),
         rate: customKind === 'percentage' ? customRate : undefined,
         fixedAmount: customKind === 'fixed' ? customAmount : undefined,
+      };
+    } else if (item.type === 'shared_pool_commission') {
+      patch = {
+        poolRate,
+        participantIds,
+        deductParticipantSalaries,
+        label: poolLabel.trim() || undefined,
       };
     }
 
@@ -203,6 +224,95 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
               </SelectContent>
             </Select>
           </div>
+        )}
+
+        {item.type === 'shared_pool_commission' && (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('sharedPoolLabelField')}</Label>
+              <Input
+                value={poolLabel}
+                onChange={(e) => setPoolLabel(e.target.value)}
+                placeholder={t('sharedPoolLabelPlaceholder')}
+                className="h-9 text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('sharedPoolRate')}</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={poolRate || ''}
+                  onChange={(e) => setPoolRate(parseFloat(e.target.value) || 0)}
+                  className="h-9 text-sm"
+                />
+                <span className="text-muted-foreground text-sm">%</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('sharedPoolParticipants')}</Label>
+              <div className="border rounded-md p-2 space-y-1.5 max-h-40 overflow-y-auto">
+                {workers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    {t('noWorkers')}
+                  </p>
+                ) : (
+                  workers.map((w) => {
+                    const checked = participantIds.includes(w.id);
+                    return (
+                      <label
+                        key={w.id}
+                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 px-1.5 py-1 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setParticipantIds(prev => [...prev, w.id]);
+                            } else {
+                              setParticipantIds(prev => prev.filter(id => id !== w.id));
+                            }
+                          }}
+                          className="cursor-pointer"
+                        />
+                        <span>{w.name}</span>
+                        {(w.formula_config.salaryAmount ?? 0) > 0 && (
+                          <span className="text-[10px] text-muted-foreground ml-auto">
+                            {w.formula_config.salaryPeriod === 'monthly'
+                              ? `${w.formula_config.salaryAmount}/mo`
+                              : `${w.formula_config.salaryAmount}/qtr`}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deductParticipantSalaries}
+                onChange={(e) => setDeductParticipantSalaries(e.target.checked)}
+                className="cursor-pointer mt-0.5"
+              />
+              <div className="flex flex-col">
+                <span className="text-xs font-medium">
+                  {t('sharedPoolDeductSalaries')}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {t('sharedPoolDeductSalariesHint')}
+                </span>
+              </div>
+            </label>
+          </>
         )}
 
         {item.type === 'custom_deduction' && (

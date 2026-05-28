@@ -168,6 +168,28 @@ export function executePipeline(
           }
         }
         totalDeductions += result.deductedAmount;
+      } else if (item.type === 'shared_pool_commission') {
+        // Credit each participant with their share of the net pool. Running
+        // total drops by the actual cash paid out (sum of perPerson × N),
+        // not the gross pool — salaries referenced here are paid via regular
+        // payroll, not via this card.
+        const perPerson = result.perPerson ?? 0;
+        const participants = item.participantIds ?? [];
+        for (const pid of participants) {
+          workerCommissions[pid] = (workerCommissions[pid] || 0) + perPerson;
+          // Store a minimal breakdown so the dashboard can display the share.
+          // The rate stored is the pool rate, which is the rate the user
+          // actually configured — not the per-worker formula_config rate.
+          const priorAddedSalary = workerBreakdowns[pid]?.addedSalary ?? 0;
+          workerBreakdowns[pid] = {
+            baseAmount: result.inputAmount,
+            commissionRate: item.poolRate ?? 0,
+            baseCommission: Math.round(perPerson * 100) / 100,
+            addedSalary: priorAddedSalary > 0 ? priorAddedSalary : undefined,
+            totalCommission: workerCommissions[pid],
+          };
+        }
+        totalDeductions += result.deductedAmount;
       } else if (item.type === 'salary' && item.workerId) {
         // Salary card that did NOT auto-net (otherwise the `continue` above
         // would have skipped this branch). Credit the salary to the worker's
@@ -343,6 +365,50 @@ function executeItem(
         commissionAmount: commission,
         workerName,
         workerId: worker.id,
+      };
+    }
+
+    case 'shared_pool_commission': {
+      const poolRate = item.poolRate ?? 0;
+      const participantIds = item.participantIds ?? [];
+      const participants = participantIds
+        .map(id => workerMap.get(id))
+        .filter((w): w is Worker => w !== undefined);
+
+      const grossPool = Math.max(0, runningTotal) * (poolRate / 100);
+
+      let salaryDeducted = 0;
+      if (item.deductParticipantSalaries) {
+        for (const w of participants) {
+          const rawSalary = workerInputs[w.id]?.salary
+            ?? w.formula_config.salaryAmount
+            ?? 0;
+          salaryDeducted += getEffectiveSalary(w.formula_config, rawSalary);
+        }
+      }
+
+      const netPool = Math.max(0, grossPool - salaryDeducted);
+      const perPerson = participants.length > 0
+        ? netPool / participants.length
+        : 0;
+      // Running total drops by the cash actually paid out (perPerson × N),
+      // which equals netPool. Salaries referenced for the calculation are
+      // paid via regular payroll, not this card.
+      const deducted = Math.round(netPool * 100) / 100;
+      const roundedPerPerson = Math.round(perPerson * 100) / 100;
+
+      return {
+        itemId: item.id,
+        type: 'shared_pool_commission',
+        label: item.label
+          || (poolRate ? `Shared Pool (${poolRate}%)` : 'Shared Pool'),
+        inputAmount: runningTotal,
+        deductedAmount: deducted,
+        poolAmount: Math.round(grossPool * 100) / 100,
+        poolSalaryDeducted: Math.round(salaryDeducted * 100) / 100,
+        netPool: Math.round(netPool * 100) / 100,
+        perPerson: roundedPerPerson,
+        participantNames: participants.map(w => w.name),
       };
     }
 

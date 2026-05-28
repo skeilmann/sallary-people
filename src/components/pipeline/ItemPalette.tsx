@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { useTranslations } from 'next-intl';
-import { GripVertical, Percent, DollarSign, User, Receipt, Plus } from 'lucide-react';
+import { GripVertical, Percent, DollarSign, User, Users, Receipt, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -172,6 +172,31 @@ export function ItemPalette({ rows, workers, onAddItem }: ItemPaletteProps) {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Shared Pool Commission */}
+        {workers.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-2">{t('sharedPool')}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs bg-indigo-50 border-indigo-200 text-indigo-800 hover:bg-indigo-100"
+              onClick={() => {
+                const item: PipelineItem = {
+                  id: generatePipelineId(),
+                  type: 'shared_pool_commission',
+                  poolRate: 0,
+                  participantIds: [],
+                  deductParticipantSalaries: false,
+                };
+                onAddItem(item);
+              }}
+            >
+              <Users className="w-3.5 h-3.5 mr-1" />
+              {t('addSharedPool')}
+            </Button>
           </div>
         )}
 

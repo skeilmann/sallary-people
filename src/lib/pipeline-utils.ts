@@ -127,6 +127,17 @@ export function validatePipeline(
           errors.push(`Commission item references non-existent worker.`);
         }
       }
+
+      // Shared-pool participants count toward "has a commission slot" so the
+      // missing-commission warning doesn't fire for them.
+      if (item.type === 'shared_pool_commission') {
+        for (const pid of item.participantIds ?? []) {
+          placedCommissions.add(pid);
+          if (!workerIds.has(pid)) {
+            errors.push(`Shared pool references non-existent worker.`);
+          }
+        }
+      }
     }
   }
 

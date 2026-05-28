@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowDown, DollarSign, TrendingDown, User } from 'lucide-react';
+import { ArrowDown, DollarSign, TrendingDown, User, Users } from 'lucide-react';
 import type { PipelineExecutionResult } from '@/lib/pipeline-types';
 import { formatCurrency } from '@/lib/formulas';
 
@@ -48,13 +48,22 @@ export function PipelinePreview({ result }: PipelinePreviewProps) {
         {/* Row-by-row breakdown */}
         {result.rowResults.map((rowResult, idx) => {
           const deductions = rowResult.itemResults.filter(
-            ir => ir.type !== 'worker_commission' && ir.deductedAmount > 0
+            ir => ir.type !== 'worker_commission'
+              && ir.type !== 'shared_pool_commission'
+              && ir.deductedAmount > 0
           );
           const commissions = rowResult.itemResults.filter(
             ir => ir.type === 'worker_commission' && (ir.commissionAmount ?? 0) > 0
           );
+          const sharedPools = rowResult.itemResults.filter(
+            ir => ir.type === 'shared_pool_commission' && (ir.perPerson ?? 0) > 0
+          );
 
-          if (deductions.length === 0 && commissions.length === 0) return null;
+          if (
+            deductions.length === 0
+            && commissions.length === 0
+            && sharedPools.length === 0
+          ) return null;
 
           return (
             <div key={rowResult.rowId}>
@@ -99,8 +108,39 @@ export function PipelinePreview({ result }: PipelinePreviewProps) {
                   </div>
                 ))}
 
+                {/* Shared pools in this row */}
+                {sharedPools.map((ir) => (
+                  <div
+                    key={ir.itemId}
+                    className="text-xs px-2 py-1.5 bg-indigo-50 rounded space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Users className="w-3 h-3 text-indigo-500" />
+                        <span className="text-indigo-700">{ir.label}</span>
+                      </div>
+                      <span className="font-mono text-indigo-600 font-medium">
+                        {formatCurrency(ir.perPerson ?? 0)} {t('each')}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 text-[10px] text-indigo-700/80">
+                      <span>
+                        {t('sharedPoolFormulaPool')}: {formatCurrency(ir.poolAmount ?? 0)}
+                      </span>
+                      {(ir.poolSalaryDeducted ?? 0) > 0 && (
+                        <span>
+                          − {t('sharedPoolFormulaSalaries')}: {formatCurrency(ir.poolSalaryDeducted ?? 0)}
+                        </span>
+                      )}
+                      <span>
+                        ÷ {ir.participantNames?.length ?? 0}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
                 {/* Row result */}
-                {deductions.length > 0 && (
+                {(deductions.length > 0 || sharedPools.length > 0) && (
                   <div className="flex items-center justify-between text-xs px-2 pt-1 border-t border-muted">
                     <span className="text-muted-foreground">{t('afterDeductions')}</span>
                     <span className="font-mono font-medium">

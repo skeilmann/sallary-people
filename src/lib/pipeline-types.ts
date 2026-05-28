@@ -1,6 +1,11 @@
 // ============ Pipeline Item Types ============
 
-export type PipelineItemType = 'tax' | 'salary' | 'worker_commission' | 'custom_deduction';
+export type PipelineItemType =
+  | 'tax'
+  | 'salary'
+  | 'worker_commission'
+  | 'custom_deduction'
+  | 'shared_pool_commission';
 
 /**
  * A single item in the calculation pipeline.
@@ -26,6 +31,18 @@ export interface PipelineItem {
 
   /** For 'custom_deduction' items: fixed dollar amount to deduct */
   fixedAmount?: number;
+
+  /** For 'shared_pool_commission' items: percentage of running total that
+   *  forms the shared bonus pool (e.g., 8 means 8%). */
+  poolRate?: number;
+
+  /** For 'shared_pool_commission' items: worker IDs that share the pool
+   *  equally. Each participant receives `netPool / participants.length`. */
+  participantIds?: string[];
+
+  /** For 'shared_pool_commission' items: when true, sum of participants'
+   *  quarterly salaries is subtracted from the pool before splitting. */
+  deductParticipantSalaries?: boolean;
 }
 
 // ============ Pipeline Row ============
@@ -90,6 +107,18 @@ export interface PipelineItemResult {
    * amount so the dashboard reflects bonus + salary.
    */
   addedSalary?: number;
+
+  /** For 'shared_pool_commission' items: gross pool (inputAmount × poolRate / 100). */
+  poolAmount?: number;
+  /** For 'shared_pool_commission' items: total quarterly salaries subtracted
+   *  from the pool when `deductParticipantSalaries` is on. */
+  poolSalaryDeducted?: number;
+  /** For 'shared_pool_commission' items: net pool after salary deduction. */
+  netPool?: number;
+  /** For 'shared_pool_commission' items: per-participant share (netPool / N). */
+  perPerson?: number;
+  /** For 'shared_pool_commission' items: participant names for display. */
+  participantNames?: string[];
 }
 
 /** Result of executing an entire row */
