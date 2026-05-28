@@ -26,16 +26,6 @@ export interface PipelineItem {
 
   /** For 'custom_deduction' items: fixed dollar amount to deduct */
   fixedAmount?: number;
-
-  /**
-   * For 'salary' items: when true, and the card sits in a row AFTER the
-   * matching worker's commission card, AND the salary amount is strictly
-   * less than the commission already paid, the salary is netted against
-   * the worker's bonus payout instead of deducting from the company
-   * running total. If conditions are not met at execution time, the
-   * engine emits an error and falls back to a normal salary deduction.
-   */
-  netAgainstBonus?: boolean;
 }
 
 // ============ Pipeline Row ============
@@ -82,29 +72,16 @@ export interface PipelineItemResult {
   /** Worker ID for linking */
   workerId?: string;
   /**
-   * For 'salary' items with netAgainstBonus=true: true when the netting was
-   * actually applied (conditions met). When false/undefined, the salary
-   * behaved as a normal deduction.
-   */
-  appliedNetting?: boolean;
-  /**
-   * For 'salary' items: when netting was applied, the amount subtracted
-   * from the worker's previously-recorded commission.
+   * For 'salary' items: when the card sits after the worker's commission
+   * card AND salary < that prior bonus, the engine nets the salary against
+   * the bonus. This field is the salary amount that was netted out (also
+   * equal to deductedAmount being 0 in that case — the company has already
+   * paid the cash via the bonus row).
    * For 'worker_commission' items: when a later salary netted against this
-   * bonus, the amount that was netted out (gross commission =
-   * commissionAmount, net = commissionAmount - nettedSalary).
+   * bonus, this is the amount netted out. Gross = commissionAmount,
+   * Net = commissionAmount - nettedSalary.
    */
   nettedSalary?: number;
-}
-
-/** Pipeline execution error (e.g. invalid netAgainstBonus configuration) */
-export interface PipelineError {
-  /** Item that caused the error */
-  itemId: string;
-  /** Machine-readable error code */
-  code: 'NET_NO_PRIOR_BONUS' | 'NET_SALARY_NOT_LESS_THAN_BONUS';
-  /** Human-readable description (English fallback; UI may localize via code) */
-  message: string;
 }
 
 /** Result of executing an entire row */
@@ -135,8 +112,6 @@ export interface PipelineExecutionResult {
     nettedSalary?: number;
     totalCommission: number;
   }>;
-  /** Validation/configuration errors raised during execution */
-  errors: PipelineError[];
 }
 
 // ============ Form types ============

@@ -17,23 +17,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { WorkerBonusCard } from '@/components/WorkerBonusCard';
 import { SavedBonusesSection } from '@/components/SavedBonusesSection';
 import { HistoricalComparisonCard } from '@/components/HistoricalComparisonCard';
-import { BulkSavePipelineModal, type BulkSaveFailure, type BulkSaveRow } from '@/components/BulkSavePipelineModal';
-import type { Worker, GlobalCalculationInputs, Quarter, CalculationInputs, CalculationWithWorker } from '@/lib/types';
+import type { Worker, Quarter, CalculationWithWorker } from '@/lib/types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
 import {
   getWorkers,
-  createCalculation,
   getCalculation,
-  getDefaultPipeline,
   getCalculationsByWorkerForPeriod,
 } from '@/lib/supabase';
-import { formatCurrency, calculateBonusWithGlobalInputs, getEffectiveSalary } from '@/lib/formulas';
-import type { CalculationPipeline, PipelineExecutionResult } from '@/lib/pipeline-types';
-import { executePipeline } from '@/lib/pipeline-engine';
-import { usePersistedGlobalInputs, usePersistedIndividualRevenues, usePersistedPeriod } from '@/lib/usePersistedInputs';
+import { formatCurrency, getEffectiveSalary } from '@/lib/formulas';
+import { usePersistedGlobalInputs, usePersistedPeriod } from '@/lib/usePersistedInputs';
 
 const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 const years = Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i);
@@ -49,7 +43,6 @@ function DashboardPageContent() {
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pipeline, setPipeline] = useState<CalculationPipeline | null>(null);
   // Calcs for the currently selected period only, grouped by worker, newest first.
   const [calculationsByWorker, setCalculationsByWorker] = useState<
     Record<string, CalculationWithWorker[]>
@@ -63,21 +56,6 @@ function DashboardPageContent() {
 
   // Persisted global inputs (survives refresh, syncs across pages)
   const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
-
-  // Persisted individual revenues per worker (survives refresh, syncs across pages).
-  // This is shared with /calculate, so we don't clobber it on quarter change —
-  // instead we keep a dashboard-local override (below).
-  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues();
-
-  // Dashboard-local override: when a saved calc exists for the selected quarter,
-  // its individual revenue is shown here. Survives within the dashboard only.
-  const [quarterIndividualRevenue, setQuarterIndividualRevenue] = useState<
-    Record<string, number>
-  >({});
-
-  // Bulk save (pipeline) selection + modal state
-  const [selectedForBulkSave, setSelectedForBulkSave] = useState<Set<string>>(new Set());
-  const [bulkSaveOpen, setBulkSaveOpen] = useState(false);
 
   // Historical calculations for comparison
   const [historicalCalculations, setHistoricalCalculations] = useState<CalculationWithWorker[]>([]);
@@ -106,17 +84,13 @@ function DashboardPageContent() {
     }
   };
 
-  // One-time load: workers + pipeline. Calculations are loaded by a separate
-  // effect that re-runs whenever the selected period changes.
+  // One-time load: workers. Calculations are loaded by a separate effect that
+  // re-runs whenever the selected period changes.
   useEffect(() => {
     (async () => {
       try {
-        const [workersData, pipelineData] = await Promise.all([
-          getWorkers(),
-          getDefaultPipeline().catch(() => null),
-        ]);
+        const workersData = await getWorkers();
         setWorkers(workersData);
-        setPipeline(pipelineData);
       } catch (error) {
         console.error('Failed to load data:', error);
       } finally {
@@ -144,58 +118,18 @@ function DashboardPageContent() {
     };
   }, [currentPeriod]);
 
-  // When the period's saved data changes (load or after save), seed the
-  // dashboard-local quarter revenue override from saved values. We deliberately
-  // do not write to the cross-page persisted hook here.
-  useEffect(() => {
-    const seed: Record<string, number> = {};
-    for (const [workerId, calcs] of Object.entries(calculationsByWorker)) {
-      const latest = calcs[0];
-      const v = latest?.inputs.individualRevenue;
-      if (v !== undefined && v !== null) seed[workerId] = v;
-    }
-    setQuarterIndividualRevenue(seed);
-  }, [calculationsByWorker]);
-
-  // Read order: quarter-specific saved value > cross-page persisted value > 0.
-  // This keeps switching quarters showing what was saved, while a fresh entry
-  // (in a quarter with no saves yet) still uses the value the user last typed.
-  const readIndividualRevenue = (workerId: string): number =>
-    quarterIndividualRevenue[workerId] ?? individualRevenues[workerId] ?? 0;
-
-  // Build workerInputs map for pipeline engine
-  const workerInputsMap: Record<string, { salary?: number; individualRevenue?: number }> = {};
-  for (const worker of workers) {
-    workerInputsMap[worker.id] = {
-      salary: worker.formula_config.salaryAmount,
-      individualRevenue: worker.formula_config.revenueSource === 'individual'
-        ? readIndividualRevenue(worker.id)
-        : undefined,
-    };
-  }
-
-  // Execute pipeline if available, otherwise fall back to per-worker calculation
-  const pipelineResult: PipelineExecutionResult | null =
-    pipeline && workers.length > 0
-      ? executePipeline(pipeline, globalInputs, workers, workerInputsMap)
-      : null;
-
-  // Calculate total bonus for all workers
-  const currentWorkersTotal = pipelineResult
-    ? Object.values(pipelineResult.workerCommissions).reduce((sum, c) => sum + c, 0)
-    : workers.reduce((sum, worker) => {
-        const isIndividual = worker.formula_config.revenueSource === 'individual';
-        return sum + calculateBonusWithGlobalInputs(worker.formula_config, globalInputs, {
-          salary: worker.formula_config.salaryAmount,
-          individualRevenue: isIndividual ? readIndividualRevenue(worker.id) : undefined,
-        });
-      }, 0);
-
   // Historical total
   const historicalTotal = historicalCalculations.reduce((sum, calc) => sum + calc.final_amount, 0);
 
-  // Combined total
-  const totalBonus = currentWorkersTotal + historicalTotal;
+  // Sum of bonuses already SAVED for the current period (one latest entry per worker).
+  const savedBonusesTotal = Object.values(calculationsByWorker).reduce(
+    (sum, calcs) => sum + (calcs[0]?.final_amount ?? 0),
+    0,
+  );
+
+  // "Total Bonusuri" shown on the dashboard: only saved bonuses for this period
+  // (plus any historical-comparison entries the user opened).
+  const totalBonus = savedBonusesTotal + historicalTotal;
 
   // Sum of all salaries actually deducted across workers (only when deductSalary is on).
   // Monthly amounts are multiplied ×3 to match the quarterly bonus period.
@@ -208,114 +142,14 @@ function DashboardPageContent() {
   const totalTaxesFromRevenue =
     (globalInputs.totalRevenue * (globalInputs.taxRate1 + globalInputs.taxRate2)) / 100;
 
-  // Final revenue: what the company keeps after taxes, salaries, and bonuses.
-  // When a pipeline is active, its engine already tracks this authoritatively.
-  const finalRevenue = pipelineResult
-    ? pipelineResult.finalRunningTotal
-    : Math.max(
-        0,
-        globalInputs.totalRevenue
-          - totalTaxesFromRevenue
-          - totalSalariesDeducted
-          - currentWorkersTotal,
-      );
-
-  const refreshCalculationsForPeriod = async () => {
-    const refreshed = await getCalculationsByWorkerForPeriod(currentPeriod).catch(() => null);
-    if (refreshed) setCalculationsByWorker(refreshed);
-  };
-
-  const handleSaveBonus = async (data: {
-    workerId: string;
-    calculatedAmount: number;
-    adjustmentAmount: number;
-    adjustmentNote: string;
-    finalAmount: number;
-    salary: number;
-    individualRevenue?: number;
-  }) => {
-    try {
-      const worker = workers.find((w) => w.id === data.workerId);
-      if (!worker) return;
-
-      const isIndividual = worker.formula_config.revenueSource === 'individual';
-      const baseValue = isIndividual
-        ? (data.individualRevenue || 0)
-        : globalInputs.totalRevenue;
-
-      const inputs: CalculationInputs = {
-        baseValue,
-        salary: data.salary,
-        individualRevenue: isIndividual ? data.individualRevenue : undefined,
-      };
-
-      await createCalculation({
-        worker_id: data.workerId,
-        period: currentPeriod,
-        inputs,
-        calculated_amount: data.calculatedAmount,
-        adjustment_amount: data.adjustmentAmount,
-        adjustment_note: data.adjustmentNote || null,
-        final_amount: data.finalAmount,
-      });
-
-      await refreshCalculationsForPeriod();
-    } catch (error) {
-      console.error('Failed to save calculation:', error);
-      alert(t('saveFailed'));
-    }
-  };
-
-  const handleBulkSaveConfirm = async (rows: BulkSaveRow[]): Promise<BulkSaveFailure[]> => {
-    const results = await Promise.allSettled(
-      rows.map(async (r) => {
-        const worker = workers.find((w) => w.id === r.workerId);
-        if (!worker) throw new Error('worker not found');
-        const isIndividual = worker.formula_config.revenueSource === 'individual';
-        const baseValue = isIndividual
-          ? (r.individualRevenue ?? 0)
-          : globalInputs.totalRevenue;
-        const inputs: CalculationInputs = {
-          baseValue,
-          salary: r.salary,
-          individualRevenue: isIndividual ? r.individualRevenue : undefined,
-        };
-        await createCalculation({
-          worker_id: r.workerId,
-          period: currentPeriod,
-          inputs,
-          calculated_amount: r.calculatedAmount,
-          adjustment_amount: r.adjustmentAmount,
-          adjustment_note: r.adjustmentNote || null,
-          final_amount: r.finalAmount,
-        });
-        return r.workerId;
-      }),
-    );
-
-    const failures: BulkSaveFailure[] = [];
-    const succeededWorkerIds: string[] = [];
-    results.forEach((res, i) => {
-      const r = rows[i];
-      if (res.status === 'fulfilled') {
-        succeededWorkerIds.push(r.workerId);
-      } else {
-        failures.push({
-          workerId: r.workerId,
-          message: res.reason instanceof Error ? res.reason.message : String(res.reason),
-        });
-      }
-    });
-
-    await refreshCalculationsForPeriod();
-    // Drop succeeded workers from selection; keep failed ones for retry.
-    setSelectedForBulkSave((prev) => {
-      const next = new Set(prev);
-      for (const id of succeededWorkerIds) next.delete(id);
-      return next;
-    });
-    return failures;
-  };
+  // Final revenue: what the company keeps after taxes, salaries, and saved bonuses.
+  const finalRevenue = Math.max(
+    0,
+    globalInputs.totalRevenue
+      - totalTaxesFromRevenue
+      - totalSalariesDeducted
+      - savedBonusesTotal,
+  );
 
   const handleRemoveHistorical = (calculationId: string) => {
     setHistoricalCalculations((prev) => prev.filter((c) => c.id !== calculationId));
@@ -384,6 +218,20 @@ function DashboardPageContent() {
                   {tHistory('clearComparison')}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Pointer to Pipeline page (the calculation surface) */}
+          {workers.length > 0 && (
+            <div className="mb-6 flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="text-sm text-blue-900">
+                {tPipeline('subtitle')}
+              </div>
+              <Link href="/pipeline">
+                <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700">
+                  {tPipeline('title')}
+                </Button>
+              </Link>
             </div>
           )}
 
@@ -518,8 +366,8 @@ function DashboardPageContent() {
             />
           )}
 
-          {/* Revenue Breakdown Card — only when no pipeline & revenue entered */}
-          {!pipelineResult && globalInputs.totalRevenue > 0 && (
+          {/* Revenue Breakdown Card — visible when revenue entered */}
+          {globalInputs.totalRevenue > 0 && (
             <Card className="mb-8">
               <CardHeader>
                 <CardTitle>{t('revenueBreakdown')}</CardTitle>
@@ -550,10 +398,10 @@ function DashboardPageContent() {
                     </div>
                   )}
 
-                  {currentWorkersTotal > 0 && (
+                  {savedBonusesTotal > 0 && (
                     <div className="flex justify-between text-sm text-red-600">
                       <span>− {t('breakdownBonuses')}</span>
-                      <span>-{formatCurrency(currentWorkersTotal)}</span>
+                      <span>-{formatCurrency(savedBonusesTotal)}</span>
                     </div>
                   )}
 
@@ -586,173 +434,6 @@ function DashboardPageContent() {
                 ))}
               </div>
             </>
-          )}
-
-          {/* Worker Bonus Cards */}
-          {workers.length > 0 && (
-            <>
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-semibold">{t('workerBonuses')}</h2>
-                  {pipeline && (
-                    <Link href="/pipeline">
-                      <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                        {tPipeline('pipelineActive')}
-                      </Badge>
-                    </Link>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Bulk-save controls — only relevant when pipeline is active */}
-                  {pipelineResult && (() => {
-                    const eligibleIds = workers
-                      .filter((w) =>
-                        w.formula_config.revenueSource === 'individual' ||
-                        globalInputs.totalRevenue > 0,
-                      )
-                      .map((w) => w.id);
-                    const allSelected =
-                      eligibleIds.length > 0 &&
-                      eligibleIds.every((id) => selectedForBulkSave.has(id));
-                    return (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setSelectedForBulkSave(
-                              allSelected ? new Set() : new Set(eligibleIds),
-                            )
-                          }
-                          disabled={eligibleIds.length === 0}
-                        >
-                          {allSelected ? t('deselectAll') : t('selectAll')}
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => setBulkSaveOpen(true)}
-                          disabled={selectedForBulkSave.size === 0}
-                        >
-                          {t('saveSelectedForPeriod', {
-                            count: selectedForBulkSave.size,
-                            period: currentPeriod,
-                          })}
-                        </Button>
-                      </>
-                    );
-                  })()}
-                  <Badge variant="outline">{currentPeriod}</Badge>
-                </div>
-              </div>
-
-              {/* Show cards - workers with individual revenue don't need global revenue input */}
-              {(() => {
-                // Check if any worker uses global revenue
-                const hasGlobalRevenueWorkers = workers.some(
-                  (w) => w.formula_config.revenueSource !== 'individual'
-                );
-                const needsGlobalRevenue = hasGlobalRevenueWorkers && globalInputs.totalRevenue === 0;
-
-                return (
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {workers.map((worker) => {
-                      const isIndividual = worker.formula_config.revenueSource === 'individual';
-                      // Show placeholder for global revenue workers if no revenue entered
-                      if (!isIndividual && globalInputs.totalRevenue === 0) {
-                        return (
-                          <Card key={worker.id} className="border-dashed opacity-60">
-                            <CardHeader className="pb-2">
-                              <CardTitle className="text-lg">
-                                <Link href={`/workers?edit=${worker.id}`} className="hover:underline hover:text-primary transition-colors">
-                                  {worker.name}
-                                </Link>
-                              </CardTitle>
-                            </CardHeader>
-                            <CardContent className="py-4 text-center text-muted-foreground text-sm">
-                              {t('enterRevenueFirst')}
-                            </CardContent>
-                          </Card>
-                        );
-                      }
-
-                      // Get pipeline-computed values if available
-                      const pipelineCommission = pipelineResult?.workerCommissions[worker.id];
-                      const pipelineBreakdown = pipelineResult?.workerBreakdowns[worker.id];
-
-                      const latestForPeriod = calculationsByWorker[worker.id]?.[0];
-                      const savedSnapshot = latestForPeriod
-                        ? {
-                            id: latestForPeriod.id,
-                            salary: latestForPeriod.inputs.salary,
-                            adjustmentAmount: latestForPeriod.adjustment_amount,
-                            adjustmentNote: latestForPeriod.adjustment_note,
-                            calculatedAmount: latestForPeriod.calculated_amount,
-                          }
-                        : null;
-
-                      const hasSavedForPeriod = !!latestForPeriod;
-
-                      return (
-                        <div key={worker.id} className="relative">
-                          {hasSavedForPeriod && (
-                            <Badge className="absolute -top-2 -right-2 z-10 bg-green-600">
-                              {t('saved')}
-                            </Badge>
-                          )}
-                          <WorkerBonusCard
-                            worker={worker}
-                            globalInputs={globalInputs}
-                            individualRevenue={readIndividualRevenue(worker.id)}
-                            onIndividualRevenueChange={(value) => {
-                              setIndividualRevenues((prev) => ({
-                                ...prev,
-                                [worker.id]: value,
-                              }));
-                              setQuarterIndividualRevenue((prev) => ({
-                                ...prev,
-                                [worker.id]: value,
-                              }));
-                            }}
-                            pipelineCommissionAmount={pipelineCommission}
-                            pipelineBaseAmount={pipelineBreakdown?.baseAmount}
-                            savedSnapshot={savedSnapshot}
-                            showSelectionCheckbox={!!pipelineResult}
-                            isSelected={selectedForBulkSave.has(worker.id)}
-                            onSelectionChange={(checked) => {
-                              setSelectedForBulkSave((prev) => {
-                                const next = new Set(prev);
-                                if (checked) next.add(worker.id);
-                                else next.delete(worker.id);
-                                return next;
-                              });
-                            }}
-                            onSave={handleSaveBonus}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-
-            </>
-          )}
-
-          {/* Bulk save confirmation modal */}
-          {pipelineResult && (
-            <BulkSavePipelineModal
-              open={bulkSaveOpen}
-              onClose={() => setBulkSaveOpen(false)}
-              workers={workers.filter((w) => selectedForBulkSave.has(w.id))}
-              pipelineResult={pipelineResult}
-              individualRevenues={(() => {
-                const m: Record<string, number> = {};
-                for (const w of workers) m[w.id] = readIndividualRevenue(w.id);
-                return m;
-              })()}
-              period={currentPeriod}
-              onConfirm={handleBulkSaveConfirm}
-            />
           )}
 
           {/* Quick Links */}

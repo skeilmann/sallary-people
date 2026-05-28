@@ -94,7 +94,7 @@ export function PipelinePreview({ result }: PipelinePreviewProps) {
                       <span className="text-blue-700">{ir.workerName ?? ir.label}</span>
                     </div>
                     <span className="font-mono text-blue-600 font-medium">
-                      {formatCurrency(ir.commissionAmount ?? 0)}
+                      {formatCurrency((ir.commissionAmount ?? 0) - (ir.nettedSalary ?? 0))}
                     </span>
                   </div>
                 ))}

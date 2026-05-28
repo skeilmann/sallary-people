@@ -84,7 +84,14 @@ export function DraggablePipelineItem({
   const getResultDisplay = (): string | null => {
     if (!result) return null;
     if (item.type === 'worker_commission' && result.commissionAmount !== undefined) {
-      return `${t('earns')} ${formatCurrency(result.commissionAmount)}`;
+      const netted = result.nettedSalary ?? 0;
+      const netAmount = result.commissionAmount - netted;
+      return `${t('earns')} ${formatCurrency(netAmount)}`;
+    }
+    if (item.type === 'salary' && result.nettedSalary !== undefined) {
+      // Salary was netted against a prior bonus — the company didn't spend
+      // additional cash, the worker's payout is reduced instead.
+      return `-${formatCurrency(result.nettedSalary)}`;
     }
     if (result.deductedAmount > 0) {
       return `-${formatCurrency(result.deductedAmount)}`;

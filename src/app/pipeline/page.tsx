@@ -4,8 +4,18 @@ import { useEffect, useState, useCallback } from 'react';
 import { RequireAuth } from '@/components/RequireAuth';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { PipelineBuilder } from '@/components/pipeline/PipelineBuilder';
-import type { Worker } from '@/lib/types';
+import { PipelineBuilder, type SaveBonusInput } from '@/components/pipeline/PipelineBuilder';
+import type {
+  Worker,
+  Quarter,
+  CalculationInputs,
+  CalculationWithWorker,
+} from '@/lib/types';
+import {
+  getCurrentQuarter,
+  getCurrentYear,
+  generatePeriod,
+} from '@/lib/types';
 import type { CalculationPipeline, PipelineRow } from '@/lib/pipeline-types';
 import {
   getWorkers,
@@ -13,17 +23,43 @@ import {
   createPipeline,
   updatePipeline,
   deletePipeline,
+  createCalculation,
+  getCalculationsByWorkerForPeriod,
 } from '@/lib/supabase';
 import { generateDefaultPipeline } from '@/lib/pipeline-utils';
+import {
+  usePersistedGlobalInputs,
+  usePersistedPeriod,
+} from '@/lib/usePersistedInputs';
+import type {
+  BulkSaveFailure,
+  BulkSaveRow,
+} from '@/components/BulkSavePipelineModal';
+
+const years = Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i);
 
 function PipelinePageContent() {
   const t = useTranslations('pipeline');
   const tCommon = useTranslations('common');
+  const tDashboard = useTranslations('dashboard');
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [pipeline, setPipeline] = useState<CalculationPipeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasNoPipeline, setHasNoPipeline] = useState(false);
+  const [calculationsByWorker, setCalculationsByWorker] = useState<
+    Record<string, CalculationWithWorker[]>
+  >({});
+
+  // Period selection shared with Dashboard via localStorage
+  const { quarter, year, setQuarter, setYear } = usePersistedPeriod(
+    getCurrentQuarter(),
+    getCurrentYear(),
+  );
+  const currentPeriod = generatePeriod(quarter as Quarter, year);
+
+  // Global inputs shared with Dashboard
+  const { globalInputs } = usePersistedGlobalInputs();
 
   useEffect(() => {
     loadData();
@@ -52,7 +88,31 @@ function PipelinePageContent() {
     }
   };
 
-  const handleSave = useCallback(async (rows: PipelineRow[], name: string) => {
+  // Reload calculations whenever the selected period changes.
+  // The `cancelled` flag prevents a slow earlier-period response from
+  // overwriting a faster later-period response when the user clicks quickly.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getCalculationsByWorkerForPeriod(currentPeriod);
+        if (!cancelled) setCalculationsByWorker(data);
+      } catch (error) {
+        console.error('Failed to load calculations for period:', error);
+        if (!cancelled) setCalculationsByWorker({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentPeriod]);
+
+  const refreshCalculationsForPeriod = async () => {
+    const refreshed = await getCalculationsByWorkerForPeriod(currentPeriod).catch(() => null);
+    if (refreshed) setCalculationsByWorker(refreshed);
+  };
+
+  const handleSavePipeline = useCallback(async (rows: PipelineRow[], name: string) => {
     if (pipeline) {
       const updated = await updatePipeline(pipeline.id, { rows, name });
       setPipeline(updated);
@@ -63,7 +123,7 @@ function PipelinePageContent() {
     }
   }, [pipeline]);
 
-  const handleDelete = useCallback(async () => {
+  const handleDeletePipeline = useCallback(async () => {
     if (!pipeline) return;
     await deletePipeline(pipeline.id);
     setPipeline(null);
@@ -77,6 +137,83 @@ function PipelinePageContent() {
     setPipeline(created);
     setHasNoPipeline(false);
   }, [workers]);
+
+  const handleSaveBonus = async (data: SaveBonusInput) => {
+    try {
+      const worker = workers.find((w) => w.id === data.workerId);
+      if (!worker) return;
+
+      const isIndividual = worker.formula_config.revenueSource === 'individual';
+      const baseValue = isIndividual
+        ? (data.individualRevenue || 0)
+        : globalInputs.totalRevenue;
+
+      const inputs: CalculationInputs = {
+        baseValue,
+        salary: data.salary,
+        individualRevenue: isIndividual ? data.individualRevenue : undefined,
+      };
+
+      await createCalculation({
+        worker_id: data.workerId,
+        period: currentPeriod,
+        inputs,
+        calculated_amount: data.calculatedAmount,
+        adjustment_amount: data.adjustmentAmount,
+        adjustment_note: data.adjustmentNote || null,
+        final_amount: data.finalAmount,
+      });
+
+      await refreshCalculationsForPeriod();
+    } catch (error) {
+      console.error('Failed to save calculation:', error);
+      alert(tDashboard('saveFailed'));
+    }
+  };
+
+  const handleBulkSaveBonuses = async (
+    rows: BulkSaveRow[],
+  ): Promise<BulkSaveFailure[]> => {
+    const results = await Promise.allSettled(
+      rows.map(async (r) => {
+        const worker = workers.find((w) => w.id === r.workerId);
+        if (!worker) throw new Error('worker not found');
+        const isIndividual = worker.formula_config.revenueSource === 'individual';
+        const baseValue = isIndividual
+          ? (r.individualRevenue ?? 0)
+          : globalInputs.totalRevenue;
+        const inputs: CalculationInputs = {
+          baseValue,
+          salary: r.salary,
+          individualRevenue: isIndividual ? r.individualRevenue : undefined,
+        };
+        await createCalculation({
+          worker_id: r.workerId,
+          period: currentPeriod,
+          inputs,
+          calculated_amount: r.calculatedAmount,
+          adjustment_amount: r.adjustmentAmount,
+          adjustment_note: r.adjustmentNote || null,
+          final_amount: r.finalAmount,
+        });
+        return r.workerId;
+      }),
+    );
+
+    const failures: BulkSaveFailure[] = [];
+    results.forEach((res, i) => {
+      const r = rows[i];
+      if (res.status === 'rejected') {
+        failures.push({
+          workerId: r.workerId,
+          message: res.reason instanceof Error ? res.reason.message : String(res.reason),
+        });
+      }
+    });
+
+    await refreshCalculationsForPeriod();
+    return failures;
+  };
 
   if (loading) {
     return (
@@ -126,8 +263,17 @@ function PipelinePageContent() {
         <PipelineBuilder
           pipeline={pipeline}
           workers={workers}
-          onSave={handleSave}
-          onDelete={handleDelete}
+          onSavePipeline={handleSavePipeline}
+          onDeletePipeline={handleDeletePipeline}
+          calculationsByWorker={calculationsByWorker}
+          quarter={quarter as Quarter}
+          year={year}
+          years={years}
+          period={currentPeriod}
+          onQuarterChange={setQuarter}
+          onYearChange={setYear}
+          onSaveBonus={handleSaveBonus}
+          onBulkSaveBonuses={handleBulkSaveBonuses}
         />
       )}
     </div>

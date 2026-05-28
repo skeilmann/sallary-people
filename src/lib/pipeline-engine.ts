@@ -4,7 +4,6 @@ import type {
   PipelineExecutionResult,
   PipelineItemResult,
   PipelineRowResult,
-  PipelineError,
 } from './pipeline-types';
 import type { Worker, GlobalCalculationInputs } from './types';
 import { getEffectiveSalary } from './formulas';
@@ -35,8 +34,6 @@ export function executePipeline(
     nettedSalary?: number;
     totalCommission: number;
   }> = {};
-  const errors: PipelineError[] = [];
-
   // Initialize all workers with 0 commission
   for (const worker of workers) {
     workerCommissions[worker.id] = 0;
@@ -62,7 +59,7 @@ export function executePipeline(
     const runningTotalBefore = runningTotal;
     const individualBasesBefore = { ...individualBases };
     // Snapshot of commissions that landed in PRIOR rows. Salary items with
-    // netAgainstBonus only net against bonuses already paid out before this row;
+    // auto-netting only nets against bonuses paid out before this row;
     // a commission card in the same row as the salary card does not qualify.
     const priorCommissions = { ...workerCommissions };
     const itemResults: PipelineItemResult[] = [];
@@ -73,11 +70,15 @@ export function executePipeline(
     let totalDeductions = 0;
 
     for (const item of row.items) {
-      // Handle netAgainstBonus salary items before delegating to executeItem,
-      // because the netting affects workerCommissions / running-total flow.
-      if (item.type === 'salary' && item.netAgainstBonus && item.workerId) {
+      // Salary items sitting in a row AFTER the matching worker's commission
+      // card, and whose amount is strictly less than that prior bonus, are
+      // automatically netted against the bonus payout: the company already
+      // paid the cash via the bonus, so the salary card becomes 0-impact on
+      // the company running total and instead reduces the worker's recorded
+      // commission. When conditions aren't met, the salary falls through to
+      // normal deduction handling.
+      if (item.type === 'salary' && item.workerId) {
         const worker = workerMap.get(item.workerId);
-        const workerName = worker?.name ?? 'Unknown';
         const rawSalary = workerInputs[item.workerId]?.salary
           ?? worker?.formula_config.salaryAmount
           ?? 0;
@@ -86,21 +87,8 @@ export function executePipeline(
           : rawSalary;
         const priorBonus = priorCommissions[item.workerId] ?? 0;
 
-        if (priorBonus <= 0) {
-          errors.push({
-            itemId: item.id,
-            code: 'NET_NO_PRIOR_BONUS',
-            message: `${workerName}'s salary is set to net against bonus, but no commission card was found in an earlier row.`,
-          });
-        } else if (salaryAmount >= priorBonus) {
-          errors.push({
-            itemId: item.id,
-            code: 'NET_SALARY_NOT_LESS_THAN_BONUS',
-            message: `${workerName}'s salary (${salaryAmount}) must be strictly less than the prior bonus (${priorBonus}) to be netted against it.`,
-          });
-        } else {
-          // Apply netting: reduce the worker's recorded commission and treat
-          // the salary as a 0-impact item on the company running total.
+        if (priorBonus > 0 && salaryAmount < priorBonus) {
+          const workerName = worker?.name ?? 'Unknown';
           const newTotal = Math.round((priorBonus - salaryAmount) * 100) / 100;
           workerCommissions[item.workerId] = newTotal;
           const existingBreakdown = workerBreakdowns[item.workerId];
@@ -135,13 +123,11 @@ export function executePipeline(
             deductedAmount: 0,
             workerName,
             workerId: item.workerId,
-            appliedNetting: true,
             nettedSalary: salaryAmount,
           });
           nettedSalaryItemIds.add(item.id);
           continue;
         }
-        // Fall through to normal salary handling when netting was rejected.
       }
 
       const result = executeItem(
@@ -245,7 +231,6 @@ export function executePipeline(
     finalRunningTotal: runningTotal,
     workerCommissions,
     workerBreakdowns,
-    errors,
   };
 }
 
