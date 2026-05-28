@@ -3,13 +3,18 @@ export interface FormulaConfig {
   baseMetric: 'revenue' | 'units_sold' | 'profit_margin';
   commissionRate: number; // percentage (e.g., 8 means 8%)
   deductions: ('returns' | 'chargebacks' | 'discounts')[];
-  // Salary deduction (per-worker amount)
-  deductSalary?: boolean;
+  // Worker salary (stored as data only — whether it's deducted from the bonus
+  // is decided by the Pipeline tab, not by this field).
   salaryAmount?: number;
-  // Period the entered salaryAmount represents. 'quarterly' = full quarter (current behaviour);
+  // Period the entered salaryAmount represents. 'quarterly' = full quarter;
   // 'monthly' = per-month amount that gets multiplied ×3 for the quarterly bonus calc.
-  // Defaults to 'quarterly' to keep existing workers unchanged.
   salaryPeriod?: 'monthly' | 'quarterly';
+  /**
+   * @deprecated Salary deduction is now decided by the pipeline (presence of a
+   * salary card), not this flag. Kept on the interface for backward compat with
+   * persisted DB rows; no code should read it.
+   */
+  deductSalary?: boolean;
   // Revenue source: 'global' (total company revenue) or 'individual' (worker's own sales)
   revenueSource?: 'global' | 'individual';
 }
@@ -88,7 +93,6 @@ export const defaultFormulaConfig: FormulaConfig = {
   baseMetric: 'revenue',
   commissionRate: 5,
   deductions: [],
-  deductSalary: false,
   salaryAmount: 0,
   salaryPeriod: 'quarterly',
   revenueSource: 'global',

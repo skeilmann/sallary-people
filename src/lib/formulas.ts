@@ -62,16 +62,10 @@ export function calculateBonusWithGlobalInputs(
     ? (workerInputs?.individualRevenue ?? 0)
     : totalRevenue;
 
-  let netAmount = startingRevenue;
-
-  // Apply salary deduction if configured (per-worker)
-  if (config.deductSalary) {
-    const rawSalary = workerInputs?.salary ?? config.salaryAmount ?? 0;
-    netAmount -= getEffectiveSalary(config, rawSalary);
-  }
-
-  // Ensure net amount doesn't go negative
-  netAmount = Math.max(0, netAmount);
+  // Salary deduction is no longer applied here — it is decided exclusively
+  // by the Pipeline (presence of a salary card). Legacy non-pipeline path
+  // computes the gross commission on revenue without subtracting salary.
+  const netAmount = Math.max(0, startingRevenue);
 
   // Apply commission rate
   const bonus = netAmount * (config.commissionRate / 100);
@@ -105,18 +99,12 @@ export function getCalculationBreakdown(
     ? (workerInputs?.individualRevenue ?? 0)
     : totalRevenue;
 
-  let netAmount = startingRevenue;
-  let rawSalaryAmount = 0;
-  let salaryAmount = 0;
+  // Salary deduction is decided by the pipeline now; the legacy breakdown
+  // never deducts it. Keep the shape of the return value for compatibility.
+  const rawSalaryAmount = 0;
+  const salaryAmount = 0;
   const salaryPeriodMonthly = config.salaryPeriod === 'monthly';
-
-  if (config.deductSalary) {
-    rawSalaryAmount = workerInputs?.salary ?? config.salaryAmount ?? 0;
-    salaryAmount = getEffectiveSalary(config, rawSalaryAmount);
-    netAmount -= salaryAmount;
-  }
-
-  netAmount = Math.max(0, netAmount);
+  const netAmount = Math.max(0, startingRevenue);
   const bonusAmount = calculateBonusWithGlobalInputs(config, globalInputs, workerInputs);
 
   return {

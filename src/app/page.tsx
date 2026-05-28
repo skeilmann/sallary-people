@@ -36,7 +36,6 @@ function DashboardPageContent() {
   const t = useTranslations('dashboard');
   const tCommon = useTranslations('common');
   const tHistory = useTranslations('workerHistory');
-  const tPipeline = useTranslations('pipeline');
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -131,11 +130,13 @@ function DashboardPageContent() {
   // (plus any historical-comparison entries the user opened).
   const totalBonus = savedBonusesTotal + historicalTotal;
 
-  // Sum of all salaries actually deducted across workers (only when deductSalary is on).
-  // Monthly amounts are multiplied ×3 to match the quarterly bonus period.
+  // Sum of every worker's salary — the company pays salaries whether or not
+  // the pipeline applies them to the bonus pool, so they always reduce
+  // finalRevenue. Monthly amounts are multiplied ×3 to match the quarter.
   const totalSalariesDeducted = workers.reduce((sum, w) => {
-    if (!w.formula_config.deductSalary) return sum;
-    return sum + getEffectiveSalary(w.formula_config, w.formula_config.salaryAmount ?? 0);
+    const salary = w.formula_config.salaryAmount ?? 0;
+    if (salary <= 0) return sum;
+    return sum + getEffectiveSalary(w.formula_config, salary);
   }, 0);
 
   // Global taxes applied once to total revenue (avoids per-worker double-counting)
@@ -218,20 +219,6 @@ function DashboardPageContent() {
                   {tHistory('clearComparison')}
                 </Button>
               </div>
-            </div>
-          )}
-
-          {/* Pointer to Pipeline page (the calculation surface) */}
-          {workers.length > 0 && (
-            <div className="mb-6 flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="text-sm text-blue-900">
-                {tPipeline('subtitle')}
-              </div>
-              <Link href="/pipeline">
-                <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700">
-                  {tPipeline('title')}
-                </Button>
-              </Link>
             </div>
           )}
 

@@ -38,6 +38,13 @@ interface WorkerBonusCardProps {
   /** When a pipeline is active, show the base amount used for this worker */
   pipelineBaseAmount?: number;
   /**
+   * Effective salary the pipeline deducted for this worker this run (after the
+   * monthly ×3 conversion if applicable). > 0 means a salary card is in the
+   * active pipeline for this worker. Used to drive the "− salariu" label and
+   * the breakdown line — replaces the legacy `config.deductSalary` check.
+   */
+  pipelineSalaryDeducted?: number;
+  /**
    * Latest saved calculation for the currently selected period, used to
    * pre-fill the editing modal (salary, adjustment slider, note). When null
    * or undefined, the card shows fresh defaults from the worker's config.
@@ -71,6 +78,7 @@ export function WorkerBonusCard({
   onIndividualRevenueChange,
   pipelineCommissionAmount,
   pipelineBaseAmount,
+  pipelineSalaryDeducted,
   savedSnapshot,
   showSelectionCheckbox,
   isSelected,
@@ -202,7 +210,7 @@ export function WorkerBonusCard({
           </div>
           <p className="text-sm text-muted-foreground">
             {config.commissionRate}% {t('commission')}
-            {config.deductSalary && ` - ${t('minusSalary')}`}
+            {(pipelineSalaryDeducted ?? 0) > 0 && ` - ${t('minusSalary')}`}
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -229,12 +237,12 @@ export function WorkerBonusCard({
             className="cursor-pointer"
             onClick={() => setIsOpen(true)}
           >
-            {config.deductSalary && (() => {
+            {(pipelineSalaryDeducted ?? 0) > 0 && (() => {
               const revenueDisplay = formatCurrency(
-                breakdown?.totalRevenue ?? pipelineBaseAmount ?? globalInputs.totalRevenue,
+                pipelineBaseAmount ?? globalInputs.totalRevenue,
               );
-              const rawSalary = breakdown?.rawSalaryAmount ?? worker.formula_config.salaryAmount ?? 0;
-              const effectiveSalary = breakdown?.salaryAmount ?? getEffectiveSalary(config, rawSalary);
+              const rawSalary = worker.formula_config.salaryAmount ?? 0;
+              const effectiveSalary = pipelineSalaryDeducted ?? getEffectiveSalary(config, rawSalary);
               const isMonthly = config.salaryPeriod === 'monthly';
               return (
                 <p className="text-xs text-muted-foreground mb-1">
@@ -297,7 +305,7 @@ export function WorkerBonusCard({
                     <span>{formatCurrency(breakdown.totalRevenue)}</span>
                   </div>
 
-                  {config.deductSalary && (
+                  {breakdown.salaryAmount > 0 && (
                     <div className="flex justify-between text-sm text-red-600">
                       <span>
                         - {t('salary')}
@@ -337,8 +345,8 @@ export function WorkerBonusCard({
               </div>
             )}
 
-            {/* Salary Input (if applicable) */}
-            {config.deductSalary && (
+            {/* Salary Input — only when the pipeline actually deducts a salary for this worker */}
+            {(pipelineSalaryDeducted ?? 0) > 0 && (
               <div className="space-y-2">
                 <Label htmlFor="salary">
                   {config.salaryPeriod === 'monthly'

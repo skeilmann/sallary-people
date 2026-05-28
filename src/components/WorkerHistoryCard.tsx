@@ -4,9 +4,10 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import type { Worker, CalculationWithWorker } from '@/lib/types';
-import { getCalculations } from '@/lib/supabase';
+import { getCalculations, deleteCalculation } from '@/lib/supabase';
 import { formatCurrency } from '@/lib/formulas';
 
 interface WorkerHistoryCardProps {
@@ -14,6 +15,7 @@ interface WorkerHistoryCardProps {
   selectedCalculationIds: Set<string>;
   onSelectionChange: (calculationId: string, selected: boolean) => void;
   maxSelections?: number;
+  onDeleted?: (calculationId: string) => void;
 }
 
 export function WorkerHistoryCard({
@@ -21,9 +23,11 @@ export function WorkerHistoryCard({
   selectedCalculationIds,
   onSelectionChange,
   maxSelections = 3,
+  onDeleted,
 }: WorkerHistoryCardProps) {
   const t = useTranslations('workerHistory');
   const tCommon = useTranslations('common');
+  const tHistory = useTranslations('history');
 
   const [calculations, setCalculations] = useState<CalculationWithWorker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +45,17 @@ export function WorkerHistoryCard({
       console.error('Failed to load calculations:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm(tHistory('deleteConfirm'))) return;
+    try {
+      await deleteCalculation(id);
+      setCalculations((prev) => prev.filter((c) => c.id !== id));
+      onDeleted?.(id);
+    } catch (error) {
+      console.error('Failed to delete calculation:', error);
     }
   };
 
@@ -143,6 +158,15 @@ export function WorkerHistoryCard({
                   )}
                 </div>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-600 hover:text-red-700 shrink-0"
+                onClick={() => handleDelete(calc.id)}
+                aria-label={tHistory('deleteConfirm')}
+              >
+                ×
+              </Button>
             </div>
           );
         })}

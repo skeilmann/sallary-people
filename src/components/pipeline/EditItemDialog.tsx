@@ -169,7 +169,7 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
               </SelectTrigger>
               <SelectContent>
                 {workers
-                  .filter(w => w.formula_config.deductSalary)
+                  .filter(w => (w.formula_config.salaryAmount ?? 0) > 0)
                   .map((w) => {
                     const disabledByOther = placedSalaries.has(w.id) && w.id !== item.workerId;
                     return (

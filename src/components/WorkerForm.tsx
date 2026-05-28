@@ -59,9 +59,11 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
   const handleSave = async () => {
     if (!name.trim()) return;
 
+    const { deductSalary: _drop, ...rest } = config;
+    void _drop;
     const configToSave: FormulaConfig = SHOW_DEDUCTION_BUTTONS
-      ? config
-      : { ...config, deductions: [] };
+      ? rest
+      : { ...rest, deductions: [] };
 
     setSaving(true);
     try {
@@ -195,75 +197,55 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
             </div>
           )}
 
-          {/* Salary Deduction */}
-          <div className="space-y-2 p-3 border rounded-lg">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="deductSalary"
-                checked={config.deductSalary || false}
+          {/* Salary (data only — deduction is decided in the Pipeline tab) */}
+          <div className="space-y-3 p-3 border rounded-lg">
+            <Label className="text-base">{t('form.salarySection')}</Label>
+            <p className="text-xs text-muted-foreground">
+              {t('form.salaryPipelineNote')}
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="salaryAmount">{t('form.defaultSalary')}</Label>
+              <Input
+                id="salaryAmount"
+                type="number"
+                min="0"
+                step="100"
+                value={config.salaryAmount || 0}
                 onChange={(e) =>
                   setConfig((prev) => ({
                     ...prev,
-                    deductSalary: e.target.checked,
+                    salaryAmount: parseFloat(e.target.value) || 0,
                   }))
                 }
-                className="rounded"
               />
-              <Label htmlFor="deductSalary">{t('form.deductSalary')}</Label>
             </div>
-            {(config.revenueSource ?? 'global') === 'global' && (
-              <p className="text-xs text-muted-foreground ml-6">
-                {t('form.deductSalaryPipelineNote')}
+            <div className="space-y-2">
+              <Label htmlFor="salaryPeriod">{t('form.salaryPeriod')}</Label>
+              <Select
+                value={config.salaryPeriod ?? 'quarterly'}
+                onValueChange={(value) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    salaryPeriod: value as 'monthly' | 'quarterly',
+                  }))
+                }
+              >
+                <SelectTrigger id="salaryPeriod">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="quarterly">
+                    {t('form.salaryPeriodQuarterly')}
+                  </SelectItem>
+                  <SelectItem value="monthly">
+                    {t('form.salaryPeriodMonthly')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {t('form.salaryPeriodHelp')}
               </p>
-            )}
-            {config.deductSalary && (
-              <div className="ml-6 space-y-3">
-                <div className="space-y-2">
-                  <Label htmlFor="salaryAmount">{t('form.defaultSalary')}</Label>
-                  <Input
-                    id="salaryAmount"
-                    type="number"
-                    min="0"
-                    step="100"
-                    value={config.salaryAmount || 0}
-                    onChange={(e) =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        salaryAmount: parseFloat(e.target.value) || 0,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="salaryPeriod">{t('form.salaryPeriod')}</Label>
-                  <Select
-                    value={config.salaryPeriod ?? 'quarterly'}
-                    onValueChange={(value) =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        salaryPeriod: value as 'monthly' | 'quarterly',
-                      }))
-                    }
-                  >
-                    <SelectTrigger id="salaryPeriod">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="quarterly">
-                        {t('form.salaryPeriodQuarterly')}
-                      </SelectItem>
-                      <SelectItem value="monthly">
-                        {t('form.salaryPeriodMonthly')}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {t('form.salaryPeriodHelp')}
-                  </p>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
         </div>

@@ -258,6 +258,27 @@ export function PipelineBuilder({
     }
   }, [rows, globalInputs, workers, workerInputs, pipeline?.id, pipelineName]);
 
+  // Per-worker salary actually deducted by the current pipeline. Sums
+  // `deductedAmount` for any salary item belonging to a worker, plus any
+  // `nettedSalary` on commission items (the salary the engine netted against
+  // a later bonus card — economically equivalent to a deduction for the
+  // worker bonus card display).
+  const pipelineSalaryByWorker = useMemo<Record<string, number>>(() => {
+    const out: Record<string, number> = {};
+    if (!executionResult) return out;
+    for (const row of executionResult.rowResults) {
+      for (const item of row.itemResults) {
+        if (!item.workerId) continue;
+        if (item.type === 'salary') {
+          out[item.workerId] = (out[item.workerId] ?? 0)
+            + (item.deductedAmount || 0)
+            + (item.nettedSalary || 0);
+        }
+      }
+    }
+    return out;
+  }, [executionResult]);
+
   // ==================== DnD Handlers ====================
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -851,6 +872,7 @@ export function PipelineBuilder({
                     }}
                     pipelineCommissionAmount={pipelineCommission}
                     pipelineBaseAmount={pipelineBreakdown?.baseAmount}
+                    pipelineSalaryDeducted={pipelineSalaryByWorker[worker.id]}
                     savedSnapshot={savedSnapshot}
                     showSelectionCheckbox={!!executionResult}
                     isSelected={selectedForBulkSave.has(worker.id)}

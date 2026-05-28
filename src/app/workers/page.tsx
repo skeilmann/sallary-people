@@ -125,6 +125,15 @@ function WorkersPageContent() {
     setSelectedCalculationIds(new Set());
   };
 
+  const handleCalculationDeleted = (calculationId: string) => {
+    setSelectedCalculationIds((prev) => {
+      if (!prev.has(calculationId)) return prev;
+      const next = new Set(prev);
+      next.delete(calculationId);
+      return next;
+    });
+  };
+
   const handleCompareSelected = () => {
     // Navigate to comparison page with selected IDs
     const ids = [...selectedCalculationIds].join(',');
@@ -201,6 +210,7 @@ function WorkersPageContent() {
                     selectedCalculationIds={selectedCalculationIds}
                     onSelectionChange={handleSelectionChange}
                     maxSelections={MAX_COMPARE_SELECTIONS}
+                    onDeleted={handleCalculationDeleted}
                   />
                 </div>
               </div>

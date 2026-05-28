@@ -40,23 +40,11 @@ export function generateDefaultPipeline(workers: Worker[]): PipelineFormData {
   };
   rows.push(taxRow);
 
-  // Row 2: Salaries for workers with deductSalary enabled
-  const salaryItems: PipelineItem[] = workers
-    .filter(w => w.formula_config.deductSalary)
-    .map(w => ({
-      id: generatePipelineId(),
-      type: 'salary' as const,
-      workerId: w.id,
-    }));
+  // Salaries are NOT auto-added to the default pipeline anymore — the user
+  // explicitly drags a salary card into the pipeline when they want a
+  // worker's salary deducted from the bonus pool.
 
-  if (salaryItems.length > 0) {
-    rows.push({
-      id: generatePipelineId(),
-      items: salaryItems,
-    });
-  }
-
-  // Row 3: All worker commissions
+  // Row 2: All worker commissions
   const commissionItems: PipelineItem[] = workers.map(w => ({
     id: generatePipelineId(),
     type: 'worker_commission' as const,
@@ -298,7 +286,7 @@ export function getAvailablePaletteItems(
       { taxIndex: 2 as const, placed: placedTaxes.has(2) },
     ],
     salaries: workers
-      .filter(w => w.formula_config.deductSalary)
+      .filter(w => (w.formula_config.salaryAmount ?? 0) > 0)
       .map(w => ({
         workerId: w.id,
         workerName: w.name,
