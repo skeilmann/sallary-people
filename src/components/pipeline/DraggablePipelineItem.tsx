@@ -93,6 +93,12 @@ export function DraggablePipelineItem({
       // additional cash, the worker's payout is reduced instead.
       return `-${formatCurrency(result.nettedSalary)}`;
     }
+    if (item.type === 'salary' && result.addedSalary !== undefined) {
+      // Salary did NOT meet the netting condition — it's added to the
+      // worker's total payout. The company still pays it, but from the
+      // worker's perspective this card increases their take-home.
+      return `+${formatCurrency(result.addedSalary)}`;
+    }
     if (result.deductedAmount > 0) {
       return `-${formatCurrency(result.deductedAmount)}`;
     }
@@ -125,7 +131,10 @@ export function DraggablePipelineItem({
           <span className="text-xs font-medium truncate">{getItemLabel()}</span>
           {result && (
             <span className={`text-[10px] font-mono ${
-              item.type === 'worker_commission' ? 'text-blue-600' : 'text-red-600'
+              item.type === 'worker_commission'
+                || (item.type === 'salary' && result?.addedSalary !== undefined)
+                ? 'text-blue-600'
+                : 'text-red-600'
             }`}>
               {getResultDisplay()}
             </span>

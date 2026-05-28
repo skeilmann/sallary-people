@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { SavedBonusesSection } from '@/components/SavedBonusesSection';
 import { HistoricalComparisonCard } from '@/components/HistoricalComparisonCard';
+import { TabHeader } from '@/components/TabHeader';
 import type { Worker, Quarter, CalculationWithWorker } from '@/lib/types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
 import {
@@ -177,19 +178,19 @@ function DashboardPageContent() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
-      </div>
+      <>
+        <TabHeader tab="dashboard" />
+        <div className="container mx-auto p-6">
+          <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">{t('title')}</h1>
-        <p className="text-muted-foreground">{t('subtitle')}</p>
-      </div>
-
+    <>
+      <TabHeader tab="dashboard" />
+      <div className="container mx-auto p-6">
       {workers.length === 0 && historicalCalculations.length === 0 ? (
         /* Empty state for new users */
         <Card className="border-dashed">
@@ -223,7 +224,7 @@ function DashboardPageContent() {
           )}
 
           {/* Global Inputs Section */}
-          <Card className="mb-8">
+          <Card className="mb-8" accent="dashboard">
             <CardHeader>
               <CardTitle>{t('globalInputs')}</CardTitle>
             </CardHeader>
@@ -328,7 +329,7 @@ function DashboardPageContent() {
                 {/* Total Preview */}
                 <div className="space-y-2">
                   <Label>{t('totalBonuses')}</Label>
-                  <div className="text-2xl font-bold text-primary">
+                  <div className="text-2xl font-bold font-mono tabular-nums text-primary">
                     {formatCurrency(totalBonus)}
                   </div>
                 </div>
@@ -336,7 +337,10 @@ function DashboardPageContent() {
                 {/* Final Revenue (what company keeps after deductions) */}
                 <div className="space-y-2">
                   <Label>{t('finalRevenue')}</Label>
-                  <div className="text-2xl font-bold text-emerald-600">
+                  <div
+                    className="text-2xl font-bold font-mono tabular-nums"
+                    style={{ color: 'var(--tab-dashboard-strong)' }}
+                  >
                     {formatCurrency(finalRevenue)}
                   </div>
                 </div>
@@ -355,7 +359,7 @@ function DashboardPageContent() {
 
           {/* Revenue Breakdown Card — visible when revenue entered */}
           {globalInputs.totalRevenue > 0 && (
-            <Card className="mb-8">
+            <Card className="mb-8" accent="dashboard">
               <CardHeader>
                 <CardTitle>{t('revenueBreakdown')}</CardTitle>
                 <p className="text-sm text-muted-foreground">
@@ -366,7 +370,7 @@ function DashboardPageContent() {
                 <div className="space-y-2 max-w-md">
                   <div className="flex justify-between text-sm">
                     <span>{t('totalRevenue')}</span>
-                    <span>{formatCurrency(globalInputs.totalRevenue)}</span>
+                    <span className="font-mono tabular-nums">{formatCurrency(globalInputs.totalRevenue)}</span>
                   </div>
 
                   {totalTaxesFromRevenue > 0 && (
@@ -374,27 +378,30 @@ function DashboardPageContent() {
                       <span>
                         − {t('breakdownTaxes')} ({(globalInputs.taxRate1 + globalInputs.taxRate2).toFixed(1)}%)
                       </span>
-                      <span>-{formatCurrency(totalTaxesFromRevenue)}</span>
+                      <span className="font-mono tabular-nums">-{formatCurrency(totalTaxesFromRevenue)}</span>
                     </div>
                   )}
 
                   {totalSalariesDeducted > 0 && (
                     <div className="flex justify-between text-sm text-red-600">
                       <span>− {t('breakdownSalaries')}</span>
-                      <span>-{formatCurrency(totalSalariesDeducted)}</span>
+                      <span className="font-mono tabular-nums">-{formatCurrency(totalSalariesDeducted)}</span>
                     </div>
                   )}
 
                   {savedBonusesTotal > 0 && (
                     <div className="flex justify-between text-sm text-red-600">
                       <span>− {t('breakdownBonuses')}</span>
-                      <span>-{formatCurrency(savedBonusesTotal)}</span>
+                      <span className="font-mono tabular-nums">-{formatCurrency(savedBonusesTotal)}</span>
                     </div>
                   )}
 
-                  <div className="flex justify-between text-base font-bold border-t pt-2 text-emerald-700">
+                  <div
+                    className="flex justify-between text-base font-bold border-t pt-2"
+                    style={{ color: 'var(--tab-dashboard-fg)' }}
+                  >
                     <span>{t('finalRevenue')}</span>
-                    <span>{formatCurrency(finalRevenue)}</span>
+                    <span className="font-mono tabular-nums">{formatCurrency(finalRevenue)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -434,7 +441,8 @@ function DashboardPageContent() {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { RequireAuth } from '@/components/RequireAuth';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
+import { TabHeader } from '@/components/TabHeader';
 import { PipelineBuilder, type SaveBonusInput } from '@/components/pipeline/PipelineBuilder';
 import type {
   Worker,
@@ -217,39 +218,41 @@ function PipelinePageContent() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
-      </div>
+      <>
+        <TabHeader tab="pipeline" />
+        <div className="container mx-auto p-6">
+          <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
+        </div>
+      </>
     );
   }
 
   if (workers.length === 0) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">{t('title')}</h1>
-          <p className="text-muted-foreground">{t('subtitle')}</p>
+      <>
+        <TabHeader tab="pipeline" />
+        <div className="container mx-auto p-6">
+          <div className="text-center py-12 border-2 border-dashed rounded-lg">
+            <p className="text-muted-foreground">{t('noWorkers')}</p>
+          </div>
         </div>
-        <div className="text-center py-12 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground">{t('noWorkers')}</p>
-        </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{t('title')}</h1>
-          <p className="text-muted-foreground">{t('subtitle')}</p>
-        </div>
-        {hasNoPipeline && (
-          <Button onClick={handleGenerateDefault}>
-            {t('generateDefault')}
-          </Button>
-        )}
-      </div>
+    <>
+      <TabHeader
+        tab="pipeline"
+        actions={
+          hasNoPipeline ? (
+            <Button onClick={handleGenerateDefault}>
+              {t('generateDefault')}
+            </Button>
+          ) : null
+        }
+      />
+      <div className="container mx-auto p-6">
 
       {hasNoPipeline ? (
         <div className="text-center py-16 border-2 border-dashed rounded-lg">
@@ -276,7 +279,8 @@ function PipelinePageContent() {
           onBulkSaveBonuses={handleBulkSaveBonuses}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

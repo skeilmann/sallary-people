@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/select';
 import { CalculationHistory } from '@/components/CalculationHistory';
 import { ComparisonView } from '@/components/ComparisonView';
+import { TabHeader } from '@/components/TabHeader';
+import { tabStyleVars } from '@/lib/tab-themes';
 import type { Worker, CalculationWithWorker, Quarter } from '@/lib/types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
 import { getWorkers, getCalculations, deleteCalculation } from '@/lib/supabase';
@@ -124,36 +126,40 @@ function HistoryPageContent() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
-      </div>
+      <>
+        <TabHeader tab="history" />
+        <div className="container mx-auto p-6">
+          <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{t('title')}</h1>
-          <p className="text-muted-foreground">
-            {t('summary', { count: filteredCalculations.length, total: formatCurrency(totalAmount) })}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant={compareMode ? 'default' : 'outline'}
-            onClick={() => {
-              setCompareMode(!compareMode);
-              if (compareMode) setSelectedIds([]);
-            }}
-          >
-            {compareMode ? t('exitCompare') : tCommon('compare')}
-          </Button>
-          <Button variant="outline" onClick={exportToCSV}>
-            {t('exportCSV')}
-          </Button>
-        </div>
-      </div>
+    <>
+      <TabHeader
+        tab="history"
+        actions={
+          <>
+            <Button
+              variant={compareMode ? 'default' : 'outline'}
+              onClick={() => {
+                setCompareMode(!compareMode);
+                if (compareMode) setSelectedIds([]);
+              }}
+            >
+              {compareMode ? t('exitCompare') : tCommon('compare')}
+            </Button>
+            <Button variant="outline" onClick={exportToCSV}>
+              {t('exportCSV')}
+            </Button>
+          </>
+        }
+      />
+      <div className="container mx-auto p-6">
+      <p className="mb-6 text-sm text-muted-foreground">
+        {t('summary', { count: filteredCalculations.length, total: formatCurrency(totalAmount) })}
+      </p>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-4 mb-6 p-4 bg-muted rounded-lg">
@@ -224,8 +230,8 @@ function HistoryPageContent() {
       </div>
 
       {compareMode ? (
-        <Tabs defaultValue="select" className="space-y-4">
-          <TabsList>
+        <Tabs defaultValue="select" className="space-y-4" style={tabStyleVars('history')}>
+          <TabsList variant="accent">
             <TabsTrigger value="select">
               {t('compare.select', { count: selectedIds.length })}
             </TabsTrigger>
@@ -256,7 +262,8 @@ function HistoryPageContent() {
           onDelete={handleDelete}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

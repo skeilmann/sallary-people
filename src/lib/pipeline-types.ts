@@ -82,6 +82,14 @@ export interface PipelineItemResult {
    * Net = commissionAmount - nettedSalary.
    */
   nettedSalary?: number;
+  /**
+   * For 'salary' items that did NOT meet the auto-netting condition
+   * (no prior bonus, or salary >= prior bonus): the salary amount that was
+   * instead credited to the worker's total payout. The company still pays it
+   * via `deductedAmount`, but the worker's recorded commission grows by this
+   * amount so the dashboard reflects bonus + salary.
+   */
+  addedSalary?: number;
 }
 
 /** Result of executing an entire row */
@@ -101,7 +109,10 @@ export interface PipelineExecutionResult {
   startingRevenue: number;
   rowResults: PipelineRowResult[];
   finalRunningTotal: number;
-  /** workerId → total commission amount (already net of any applied salary netting) */
+  /**
+   * workerId → total worker payout (commission, net of any auto-netted salary,
+   * plus any non-netted salary added on top).
+   */
   workerCommissions: Record<string, number>;
   /** workerId → breakdown of how commission was computed */
   workerBreakdowns: Record<string, {
@@ -110,6 +121,8 @@ export interface PipelineExecutionResult {
     baseCommission: number;
     /** Salary amount that was netted against this worker's bonus, if any */
     nettedSalary?: number;
+    /** Salary amount that was added on top of this worker's bonus, if any */
+    addedSalary?: number;
     totalCommission: number;
   }>;
 }

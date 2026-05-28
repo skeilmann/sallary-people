@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { WorkerCard } from '@/components/WorkerCard';
 import { WorkerForm } from '@/components/WorkerForm';
 import { WorkerHistoryCard } from '@/components/WorkerHistoryCard';
+import { TabHeader } from '@/components/TabHeader';
 import type { Worker, FormulaConfig } from '@/lib/types';
 import { getWorkers, createWorker, updateWorker, deleteWorker } from '@/lib/supabase';
 
@@ -142,21 +143,22 @@ function WorkersPageContent() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
-      </div>
+      <>
+        <TabHeader tab="workers" />
+        <div className="container mx-auto p-6">
+          <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{t('title')}</h1>
-          <p className="text-muted-foreground">{t('subtitle')}</p>
-        </div>
-        <Button onClick={handleAdd}>{t('addWorker')}</Button>
-      </div>
+    <>
+      <TabHeader
+        tab="workers"
+        actions={<Button onClick={handleAdd}>{t('addWorker')}</Button>}
+      />
+      <div className="container mx-auto p-6">
 
       {workers.length === 0 ? (
         <div className="text-center py-12 border-2 border-dashed rounded-lg">
@@ -225,7 +227,8 @@ function WorkersPageContent() {
         onClose={() => setFormOpen(false)}
         onSave={handleSave}
       />
-    </div>
+      </div>
+    </>
   );
 }
 

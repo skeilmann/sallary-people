@@ -32,6 +32,7 @@ export function executePipeline(
     commissionRate: number;
     baseCommission: number;
     nettedSalary?: number;
+    addedSalary?: number;
     totalCommission: number;
   }> = {};
   // Initialize all workers with 0 commission
@@ -149,20 +150,39 @@ export function executePipeline(
 
           // Store breakdown — use result.inputAmount which is the actual base
           // (per-worker individual base for individual-source workers, pipeline
-          // running total otherwise)
+          // running total otherwise). Preserve any addedSalary already
+          // accumulated from a salary card that ran earlier in this pipeline.
           const worker = result.workerId ? workerMap.get(result.workerId) : undefined;
           if (worker) {
             const config = worker.formula_config;
             const actualBase = result.inputAmount;
             const baseCommission = actualBase * (config.commissionRate / 100);
+            const priorAddedSalary = workerBreakdowns[result.workerId]?.addedSalary ?? 0;
             workerBreakdowns[result.workerId] = {
               baseAmount: actualBase,
               commissionRate: config.commissionRate,
               baseCommission: Math.round(baseCommission * 100) / 100,
-              totalCommission: result.commissionAmount ?? 0,
+              addedSalary: priorAddedSalary > 0 ? priorAddedSalary : undefined,
+              totalCommission: workerCommissions[result.workerId],
             };
           }
         }
+        totalDeductions += result.deductedAmount;
+      } else if (item.type === 'salary' && item.workerId) {
+        // Salary card that did NOT auto-net (otherwise the `continue` above
+        // would have skipped this branch). Credit the salary to the worker's
+        // recorded payout so their total = bonus + salary. Company still pays
+        // it: `result.deductedAmount` continues to flow into `totalDeductions`.
+        const added = Math.round(result.deductedAmount * 100) / 100;
+        workerCommissions[item.workerId] = Math.round(
+          ((workerCommissions[item.workerId] ?? 0) + added) * 100
+        ) / 100;
+        const existing = workerBreakdowns[item.workerId];
+        if (existing) {
+          existing.addedSalary = (existing.addedSalary ?? 0) + added;
+          existing.totalCommission = workerCommissions[item.workerId];
+        }
+        result.addedSalary = added;
         totalDeductions += result.deductedAmount;
       } else {
         totalDeductions += result.deductedAmount;

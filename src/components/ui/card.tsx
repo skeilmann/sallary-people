@@ -1,11 +1,28 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { TAB_THEMES, type TabKey } from "@/lib/tab-themes"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+type CardProps = React.ComponentProps<"div"> & {
+  /** Adds a 2px left border in the tab's strong color as a semantic accent.
+   * Useful for marking which workflow stage the card belongs to. */
+  accent?: TabKey
+}
+
+function Card({ className, accent, style, ...props }: CardProps) {
+  const accentStyle = accent
+    ? {
+        ...style,
+        borderLeftColor: TAB_THEMES[accent].vars.strong,
+        borderLeftWidth: 2,
+      }
+    : style
+
   return (
     <div
       data-slot="card"
+      data-accent={accent ?? undefined}
+      style={accentStyle}
       className={cn(
         "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm",
         className

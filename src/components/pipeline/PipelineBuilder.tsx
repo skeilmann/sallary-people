@@ -258,11 +258,12 @@ export function PipelineBuilder({
     }
   }, [rows, globalInputs, workers, workerInputs, pipeline?.id, pipelineName]);
 
-  // Per-worker salary actually deducted by the current pipeline. Sums
-  // `deductedAmount` for any salary item belonging to a worker, plus any
-  // `nettedSalary` on commission items (the salary the engine netted against
-  // a later bonus card — economically equivalent to a deduction for the
-  // worker bonus card display).
+  // Per-worker salary that was netted against the worker's bonus by the
+  // pipeline. Only the auto-netted portion counts here — when a salary card
+  // does NOT meet the netting condition, the engine instead credits the
+  // salary to the worker's payout (workerCommissions), so it is not a
+  // deduction from the worker's perspective and must be excluded from this
+  // memo. Used by WorkerBonusCard to render the "- salary" formula label.
   const pipelineSalaryByWorker = useMemo<Record<string, number>>(() => {
     const out: Record<string, number> = {};
     if (!executionResult) return out;
@@ -270,9 +271,7 @@ export function PipelineBuilder({
       for (const item of row.itemResults) {
         if (!item.workerId) continue;
         if (item.type === 'salary') {
-          out[item.workerId] = (out[item.workerId] ?? 0)
-            + (item.deductedAmount || 0)
-            + (item.nettedSalary || 0);
+          out[item.workerId] = (out[item.workerId] ?? 0) + (item.nettedSalary || 0);
         }
       }
     }

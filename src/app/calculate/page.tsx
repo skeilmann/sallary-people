@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { DynamicBonusForm } from '@/components/DynamicBonusForm';
+import { TabHeader } from '@/components/TabHeader';
 import type { Worker, CalculationInputs } from '@/lib/types';
 import { getWorkers, createCalculation } from '@/lib/supabase';
 import { RequireAuth } from '@/components/RequireAuth';
@@ -61,44 +62,48 @@ function CalculatePageContent() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6 max-w-2xl">
-        <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
-      </div>
+      <>
+        <TabHeader tab="calculate" />
+        <div className="container mx-auto p-6 max-w-2xl">
+          <div className="text-center py-12 text-muted-foreground">{tCommon('loading')}</div>
+        </div>
+      </>
     );
   }
 
   if (workers.length === 0) {
     return (
-      <div className="container mx-auto p-6 max-w-2xl">
-        <div className="text-center py-12 border-2 border-dashed rounded-lg">
-          <p className="text-muted-foreground mb-4">
-            {t('noWorkers')}
-          </p>
-          <button
-            onClick={() => router.push('/workers')}
-            className="text-primary underline"
-          >
-            {t('goToWorkers')}
-          </button>
+      <>
+        <TabHeader tab="calculate" />
+        <div className="container mx-auto p-6 max-w-2xl">
+          <div className="text-center py-12 border-2 border-dashed rounded-lg">
+            <p className="text-muted-foreground mb-4">
+              {t('noWorkers')}
+            </p>
+            <button
+              onClick={() => router.push('/workers')}
+              className="text-primary underline"
+            >
+              {t('goToWorkers')}
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">{t('title')}</h1>
-        <p className="text-muted-foreground">{t('subtitle')}</p>
+    <>
+      <TabHeader tab="calculate" />
+      <div className="container mx-auto p-6 max-w-2xl">
+        <DynamicBonusForm
+          workers={workers}
+          initialWorkerId={initialWorkerId}
+          onSave={handleSave}
+          onCancel={handleCancel}
+        />
       </div>
-
-      <DynamicBonusForm
-        workers={workers}
-        initialWorkerId={initialWorkerId}
-        onSave={handleSave}
-        onCancel={handleCancel}
-      />
-    </div>
+    </>
   );
 }
 
