@@ -26,7 +26,9 @@ import {
   deletePipeline,
   createCalculation,
   getCalculationsByWorkerForPeriod,
+  updateWorker,
 } from '@/lib/supabase';
+import type { FormulaConfig } from '@/lib/types';
 import { generateDefaultPipeline } from '@/lib/pipeline-utils';
 import {
   usePersistedGlobalInputs,
@@ -172,6 +174,14 @@ function PipelinePageContent() {
     }
   };
 
+  const handleUpdateWorker = async (
+    workerId: string,
+    data: { name: string; formula_config: FormulaConfig },
+  ) => {
+    const updated = await updateWorker(workerId, data);
+    setWorkers((prev) => prev.map((w) => (w.id === workerId ? updated : w)));
+  };
+
   const handleBulkSaveBonuses = async (
     rows: BulkSaveRow[],
   ): Promise<BulkSaveFailure[]> => {
@@ -277,6 +287,7 @@ function PipelinePageContent() {
           onYearChange={setYear}
           onSaveBonus={handleSaveBonus}
           onBulkSaveBonuses={handleBulkSaveBonuses}
+          onUpdateWorker={handleUpdateWorker}
         />
       )}
       </div>

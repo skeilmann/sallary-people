@@ -235,7 +235,12 @@
     "finalBonus": "Bonus Final",
     "saveBonus": "Salvează Bonusul",
     "viewingSavedQuarter": "Salvat",
-    "selectForBulkSave": "Selectează pentru salvare în bloc"
+    "selectForBulkSave": "Selectează pentru salvare în bloc",
+    "plusSalary": "+ salariu trim. {amount}",
+    "grandTotalShort": "total {amount}",
+    "grandTotalTooltip": "Bonus {bonus} + salariu trimestrial {salary}",
+    "workerSettings": "Setări angajat",
+    "saveWorkerSettings": "Actualizează angajat"
   },
   "workerHistory": {
     "historyFor": "Istoric pentru {name}",

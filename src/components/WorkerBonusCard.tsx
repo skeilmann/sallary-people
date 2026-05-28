@@ -18,7 +18,14 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { Worker, GlobalCalculationInputs } from '@/lib/types';
+import type { Worker, GlobalCalculationInputs, FormulaConfig } from '@/lib/types';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   formatCurrency,
   calculateBonusWithGlobalInputs,
@@ -69,6 +76,12 @@ interface WorkerBonusCardProps {
     salary: number;
     individualRevenue?: number;
   }) => void;
+  /** Persist edits to the worker profile from the bonus dialog. When omitted,
+   *  the worker-settings panel in the dialog is hidden. */
+  onUpdateWorker?: (
+    workerId: string,
+    data: { name: string; formula_config: FormulaConfig },
+  ) => Promise<void>;
 }
 
 export function WorkerBonusCard({
@@ -84,10 +97,12 @@ export function WorkerBonusCard({
   isSelected,
   onSelectionChange,
   onSave,
+  onUpdateWorker,
 }: WorkerBonusCardProps) {
   const t = useTranslations('bonusCard');
   const tCommon = useTranslations('common');
   const tDashboard = useTranslations('dashboard');
+  const tWorkers = useTranslations('workers');
 
   const [isOpen, setIsOpen] = useState(false);
   const [salary, setSalary] = useState(worker.formula_config.salaryAmount || 0);
@@ -95,6 +110,41 @@ export function WorkerBonusCard({
   // from this each render so editing either input updates the other.
   const [adjustmentAmount, setAdjustmentAmount] = useState(0);
   const [adjustmentNote, setAdjustmentNote] = useState('');
+
+  // Local edit buffer for the worker-settings panel inside the dialog. The
+  // panel only persists changes when the user clicks "Update Worker", so the
+  // bonus calculation above is unaffected until then.
+  const [editName, setEditName] = useState(worker.name);
+  const [editCommissionRate, setEditCommissionRate] = useState(
+    worker.formula_config.commissionRate,
+  );
+  const [editSalaryAmount, setEditSalaryAmount] = useState(
+    worker.formula_config.salaryAmount ?? 0,
+  );
+  const [editSalaryPeriod, setEditSalaryPeriod] = useState<'monthly' | 'quarterly'>(
+    worker.formula_config.salaryPeriod ?? 'quarterly',
+  );
+  const [editRevenueSource, setEditRevenueSource] = useState<'global' | 'individual'>(
+    worker.formula_config.revenueSource ?? 'global',
+  );
+  const [savingWorker, setSavingWorker] = useState(false);
+  const [workerSettingsOpen, setWorkerSettingsOpen] = useState(false);
+
+  // Reset the worker-settings buffer whenever the worker prop changes (e.g.
+  // after a successful save propagates new data, or when switching periods).
+  useEffect(() => {
+    setEditName(worker.name);
+    setEditCommissionRate(worker.formula_config.commissionRate);
+    setEditSalaryAmount(worker.formula_config.salaryAmount ?? 0);
+    setEditSalaryPeriod(worker.formula_config.salaryPeriod ?? 'quarterly');
+    setEditRevenueSource(worker.formula_config.revenueSource ?? 'global');
+  }, [
+    worker.name,
+    worker.formula_config.commissionRate,
+    worker.formula_config.salaryAmount,
+    worker.formula_config.salaryPeriod,
+    worker.formula_config.revenueSource,
+  ]);
 
   // Sync salary when worker config changes (e.g. after editing worker settings)
   useEffect(() => {
@@ -136,6 +186,37 @@ export function WorkerBonusCard({
 
   // Get breakdown for display (only used in non-pipeline mode dialog)
   const breakdown = isPipelineMode ? null : getCalculationBreakdown(config, globalInputs, workerInputs);
+
+  // Worker's quarterly salary as a number, used both for the grand-total
+  // display and as the basis for "+ salariu" labels. Reads the saved worker
+  // config (NOT the local `salary` edit buffer above), since that buffer is
+  // only used when a salary card is in the active pipeline.
+  const quarterlySalary = getEffectiveSalary(
+    config,
+    worker.formula_config.salaryAmount ?? 0,
+  );
+  const grandTotal = calculatedAmount + quarterlySalary;
+
+  const handleSaveWorker = async () => {
+    if (!onUpdateWorker || !editName.trim()) return;
+    setSavingWorker(true);
+    try {
+      const nextConfig: FormulaConfig = {
+        ...config,
+        commissionRate: editCommissionRate,
+        salaryAmount: editSalaryAmount,
+        salaryPeriod: editSalaryPeriod,
+        revenueSource: editRevenueSource,
+      };
+      await onUpdateWorker(worker.id, {
+        name: editName.trim(),
+        formula_config: nextConfig,
+      });
+      setWorkerSettingsOpen(false);
+    } finally {
+      setSavingWorker(false);
+    }
+  };
 
   const handleSave = () => {
     if (adjustmentAmount !== 0 && !adjustmentNote.trim()) {
@@ -262,6 +343,21 @@ export function WorkerBonusCard({
             <div className="text-3xl font-bold text-primary">
               {formatCurrency(calculatedAmount)}
             </div>
+            {quarterlySalary > 0 && (
+              <p
+                className="text-[11px] text-muted-foreground/70 mt-0.5 tabular-nums"
+                title={t('grandTotalTooltip', {
+                  bonus: formatCurrency(calculatedAmount),
+                  salary: formatCurrency(quarterlySalary),
+                })}
+              >
+                {t('plusSalary', { amount: formatCurrency(quarterlySalary) })}
+                {' · '}
+                <span className="font-medium">
+                  {t('grandTotalShort', { amount: formatCurrency(grandTotal) })}
+                </span>
+              </p>
+            )}
             <p className="text-sm text-muted-foreground mt-1">
               {t('clickToAdjust')}
             </p>
@@ -424,7 +520,151 @@ export function WorkerBonusCard({
                 <span className="font-medium">{t('finalBonus')}</span>
                 <span className="text-2xl font-bold">{formatCurrency(finalAmount)}</span>
               </div>
+              {quarterlySalary > 0 && (
+                <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground/80 tabular-nums">
+                  <span>
+                    {t('plusSalary', { amount: formatCurrency(quarterlySalary) })}
+                  </span>
+                  <span className="font-medium">
+                    {t('grandTotalShort', {
+                      amount: formatCurrency(finalAmount + quarterlySalary),
+                    })}
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* Worker Settings — collapsible, edits the worker profile in place.
+                Saved separately from the bonus via its own "Update Worker"
+                button so the two intents stay distinct. */}
+            {onUpdateWorker && (
+              <details
+                open={workerSettingsOpen}
+                onToggle={(e) => setWorkerSettingsOpen((e.target as HTMLDetailsElement).open)}
+                className="border rounded-lg group"
+              >
+                <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground flex items-center justify-between">
+                  <span>{t('workerSettings')}</span>
+                  <span className="text-[10px] text-muted-foreground/70 group-open:hidden">
+                    {config.commissionRate}%
+                    {(worker.formula_config.salaryAmount ?? 0) > 0
+                      && ` · ${formatCurrency(worker.formula_config.salaryAmount ?? 0)}${
+                        (worker.formula_config.salaryPeriod ?? 'quarterly') === 'monthly'
+                          ? t('perMonthShort')
+                          : ''
+                      }`}
+                  </span>
+                </summary>
+                <div className="px-3 py-3 space-y-3 border-t bg-muted/30">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`ws-name-${worker.id}`} className="text-xs">
+                      {tWorkers('form.name')}
+                    </Label>
+                    <Input
+                      id={`ws-name-${worker.id}`}
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`ws-rate-${worker.id}`} className="text-xs">
+                      {tWorkers('form.commissionRate')}
+                    </Label>
+                    <Input
+                      id={`ws-rate-${worker.id}`}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={editCommissionRate}
+                      onChange={(e) =>
+                        setEditCommissionRate(parseFloat(e.target.value) || 0)
+                      }
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`ws-salary-${worker.id}`} className="text-xs">
+                        {tWorkers('form.defaultSalary')}
+                      </Label>
+                      <Input
+                        id={`ws-salary-${worker.id}`}
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={editSalaryAmount}
+                        onChange={(e) =>
+                          setEditSalaryAmount(parseFloat(e.target.value) || 0)
+                        }
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        {tWorkers('form.salaryPeriod')}
+                      </Label>
+                      <Select
+                        value={editSalaryPeriod}
+                        onValueChange={(v) =>
+                          setEditSalaryPeriod(v as 'monthly' | 'quarterly')
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="quarterly">
+                            {tWorkers('form.salaryPeriodQuarterly')}
+                          </SelectItem>
+                          <SelectItem value="monthly">
+                            {tWorkers('form.salaryPeriodMonthly')}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      {tWorkers('form.revenueSource')}
+                    </Label>
+                    <Select
+                      value={editRevenueSource}
+                      onValueChange={(v) =>
+                        setEditRevenueSource(v as 'global' | 'individual')
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="global">
+                          {tWorkers('form.revenueSourceGlobal')}
+                        </SelectItem>
+                        <SelectItem value="individual">
+                          {tWorkers('form.revenueSourceIndividual')}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    className="text-xs w-full"
+                    onClick={handleSaveWorker}
+                    disabled={savingWorker || !editName.trim()}
+                  >
+                    {savingWorker
+                      ? tWorkers('form.saving')
+                      : t('saveWorkerSettings')}
+                  </Button>
+                </div>
+              </details>
+            )}
           </div>
 
           <DialogFooter>

@@ -235,7 +235,12 @@
     "finalBonus": "Bonus Finale",
     "saveBonus": "Salva Bonus",
     "viewingSavedQuarter": "Salvato",
-    "selectForBulkSave": "Seleziona per salvataggio multiplo"
+    "selectForBulkSave": "Seleziona per salvataggio multiplo",
+    "plusSalary": "+ stipendio trim. {amount}",
+    "grandTotalShort": "totale {amount}",
+    "grandTotalTooltip": "Bonus {bonus} + stipendio trimestrale {salary}",
+    "workerSettings": "Impostazioni dipendente",
+    "saveWorkerSettings": "Aggiorna dipendente"
   },
   "workerHistory": {
     "historyFor": "Storico per {name}",

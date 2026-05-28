@@ -48,6 +48,7 @@ import type {
   Worker,
   Quarter,
   CalculationWithWorker,
+  FormulaConfig,
 } from '@/lib/types';
 import {
   addRow,
@@ -96,6 +97,12 @@ interface PipelineBuilderProps {
   onYearChange: (y: number) => void;
   onSaveBonus: (data: SaveBonusInput) => Promise<void>;
   onBulkSaveBonuses: (rows: BulkSaveRow[]) => Promise<BulkSaveFailure[]>;
+  /** Persist edits to a worker's profile (name + formula_config) from the
+   *  bonus dialog, without leaving the Pipeline tab. */
+  onUpdateWorker?: (
+    workerId: string,
+    data: { name: string; formula_config: FormulaConfig },
+  ) => Promise<void>;
 }
 
 export function PipelineBuilder({
@@ -112,6 +119,7 @@ export function PipelineBuilder({
   onYearChange,
   onSaveBonus,
   onBulkSaveBonuses,
+  onUpdateWorker,
 }: PipelineBuilderProps) {
   const t = useTranslations('pipeline');
   const tCommon = useTranslations('common');
@@ -472,11 +480,18 @@ export function PipelineBuilder({
   const workerMap = new Map(workers.map(w => [w.id, w]));
 
   // Eligible workers for bulk save (need either individual revenue source or
-  // a non-zero global revenue to produce a meaningful number).
+  // a non-zero global revenue to produce a meaningful number). When a pipeline
+  // is active, also require the worker to actually be referenced by it —
+  // otherwise "Select all" would tick hidden cards and bulk-save $0 records
+  // for workers who have no commission item in the pipeline.
   const eligibleWorkerIds = workers
-    .filter((w) =>
-      w.formula_config.revenueSource === 'individual' || globalInputs.totalRevenue > 0,
-    )
+    .filter((w) => {
+      const hasRevenue =
+        w.formula_config.revenueSource === 'individual' || globalInputs.totalRevenue > 0;
+      if (!hasRevenue) return false;
+      if (executionResult && !executionResult.workerBreakdowns[w.id]) return false;
+      return true;
+    })
     .map((w) => w.id);
   const allSelected =
     eligibleWorkerIds.length > 0 &&
@@ -841,6 +856,15 @@ export function PipelineBuilder({
               const pipelineCommission = executionResult?.workerCommissions[worker.id];
               const pipelineBreakdown = executionResult?.workerBreakdowns[worker.id];
 
+              // When a pipeline is active, hide cards for workers who aren't
+              // referenced by any item in it. `workerCommissions` initializes
+              // every worker to 0, so the breakdown map is the authoritative
+              // signal — it only gets an entry when a commission/salary/shared-
+              // pool item actually credits the worker.
+              if (executionResult && !pipelineBreakdown) {
+                return null;
+              }
+
               const latestForPeriod = calculationsByWorker[worker.id]?.[0];
               const savedSnapshot = latestForPeriod
                 ? {
@@ -884,6 +908,7 @@ export function PipelineBuilder({
                       });
                     }}
                     onSave={handleSaveBonus}
+                    onUpdateWorker={onUpdateWorker}
                   />
                 </div>
               );

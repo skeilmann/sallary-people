@@ -235,7 +235,12 @@
     "finalBonus": "Final Bonus",
     "saveBonus": "Save Bonus",
     "viewingSavedQuarter": "Saved",
-    "selectForBulkSave": "Select for bulk save"
+    "selectForBulkSave": "Select for bulk save",
+    "plusSalary": "+ qtr salary {amount}",
+    "grandTotalShort": "total {amount}",
+    "grandTotalTooltip": "Bonus {bonus} + quarterly salary {salary}",
+    "workerSettings": "Worker settings",
+    "saveWorkerSettings": "Update worker"
   },
   "workerHistory": {
     "historyFor": "History for {name}",
