@@ -123,6 +123,14 @@ export function PipelinePreview({ result }: PipelinePreviewProps) {
                         {formatCurrency(ir.perPerson ?? 0)} {t('each')}
                       </span>
                     </div>
+                    <div className="text-[10px] text-indigo-700/80">
+                      {t(
+                        ir.poolBaseSource === 'participants_sum'
+                          ? 'sharedPoolFormulaBaseParticipants'
+                          : 'sharedPoolFormulaBasePipeline',
+                        { amount: formatCurrency(ir.poolBase ?? ir.inputAmount) },
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-1 text-[10px] text-indigo-700/80">
                       <span>
                         {t('sharedPoolFormulaPool')}: {formatCurrency(ir.poolAmount ?? 0)}

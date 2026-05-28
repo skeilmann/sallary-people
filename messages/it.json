@@ -331,6 +331,13 @@
     "sharedPoolDeductSalariesHint": "Somma lo stipendio di ogni partecipante (×3 se mensile) e lo sottrae dal bonus lordo prima della divisione.",
     "sharedPoolFormulaPool": "Bonus",
     "sharedPoolFormulaSalaries": "stipendi",
+    "sharedPoolBaseSource": "Base del bonus",
+    "sharedPoolBasePipeline": "Totale corrente della pipeline (a livello aziendale)",
+    "sharedPoolBaseParticipantsSum": "Somma dei fatturati individuali dei partecipanti",
+    "sharedPoolBasePipelineHint": "Bonus = (totale corrente in questa riga) × aliquota. L'intero fatturato aziendale finanzia il bonus.",
+    "sharedPoolBaseParticipantsSumHint": "Bonus = (somma dei fatturati individuali dei partecipanti) × aliquota. Da usare quando il team è finanziato solo dalle proprie vendite combinate.",
+    "sharedPoolFormulaBasePipeline": "Base: totale pipeline {amount}",
+    "sharedPoolFormulaBaseParticipants": "Base: somma fatturati partecipanti {amount}",
     "each": "cad."
   }
 }

@@ -43,6 +43,15 @@ export interface PipelineItem {
   /** For 'shared_pool_commission' items: when true, sum of participants'
    *  quarterly salaries is subtracted from the pool before splitting. */
   deductParticipantSalaries?: boolean;
+
+  /** For 'shared_pool_commission' items: what value the poolRate is applied to.
+   *  - 'pipeline' (default): the pipeline's running total at this card's row
+   *    (company-wide, reduced by any taxes/expenses placed above).
+   *  - 'participants_sum': sum of each participant's individualRevenue input.
+   *    Use this when the team's bonus is funded from their own combined sales
+   *    rather than the company's total revenue.
+   *  Undefined behaves as 'pipeline' for backward compatibility. */
+  baseSource?: 'pipeline' | 'participants_sum';
 }
 
 // ============ Pipeline Row ============
@@ -108,7 +117,14 @@ export interface PipelineItemResult {
    */
   addedSalary?: number;
 
-  /** For 'shared_pool_commission' items: gross pool (inputAmount × poolRate / 100). */
+  /** For 'shared_pool_commission' items: the value that poolRate was applied
+   *  to. Equals `inputAmount` when baseSource is 'pipeline' (or unset), and
+   *  the sum of participants' individualRevenue when baseSource is
+   *  'participants_sum'. */
+  poolBase?: number;
+  /** For 'shared_pool_commission' items: which value `poolBase` came from. */
+  poolBaseSource?: 'pipeline' | 'participants_sum';
+  /** For 'shared_pool_commission' items: gross pool (poolBase × poolRate / 100). */
   poolAmount?: number;
   /** For 'shared_pool_commission' items: total quarterly salaries subtracted
    *  from the pool when `deductParticipantSalaries` is on. */

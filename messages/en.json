@@ -331,6 +331,13 @@
     "sharedPoolDeductSalariesHint": "Sums each participant's salary (×3 if monthly) and subtracts it from the gross pool before splitting.",
     "sharedPoolFormulaPool": "Pool",
     "sharedPoolFormulaSalaries": "salaries",
+    "sharedPoolBaseSource": "Pool base",
+    "sharedPoolBasePipeline": "Pipeline running total (company-wide)",
+    "sharedPoolBaseParticipantsSum": "Sum of participants' individual revenues",
+    "sharedPoolBasePipelineHint": "Pool = (running total at this row) × rate. The whole company revenue funds the pool.",
+    "sharedPoolBaseParticipantsSumHint": "Pool = (sum of participants' individual revenues) × rate. Use when the team is funded only by their own combined sales.",
+    "sharedPoolFormulaBasePipeline": "Base: pipeline total {amount}",
+    "sharedPoolFormulaBaseParticipants": "Base: sum of participants' revenues {amount}",
     "each": "each"
   }
 }

@@ -331,6 +331,13 @@
     "sharedPoolDeductSalariesHint": "Adună salariile fiecărui participant (×3 dacă sunt lunare) și le scade din bonusul brut înainte de împărțire.",
     "sharedPoolFormulaPool": "Bonus",
     "sharedPoolFormulaSalaries": "salarii",
+    "sharedPoolBaseSource": "Baza bonusului",
+    "sharedPoolBasePipeline": "Totalul curent al fluxului (la nivel de companie)",
+    "sharedPoolBaseParticipantsSum": "Suma veniturilor individuale ale participanților",
+    "sharedPoolBasePipelineHint": "Bonus = (totalul curent pe rândul ăsta) × cota. Întregul venit al companiei finanțează bonusul.",
+    "sharedPoolBaseParticipantsSumHint": "Bonus = (suma veniturilor individuale ale participanților) × cota. Folosește când echipa e finanțată doar din vânzările lor combinate.",
+    "sharedPoolFormulaBasePipeline": "Bază: totalul fluxului {amount}",
+    "sharedPoolFormulaBaseParticipants": "Bază: suma veniturilor participanților {amount}",
     "each": "fiecare"
   }
 }

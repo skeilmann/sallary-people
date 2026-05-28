@@ -175,6 +175,10 @@ export function executePipeline(
         // payroll, not via this card.
         const perPerson = result.perPerson ?? 0;
         const participants = item.participantIds ?? [];
+        // Use the actual pool base (could be running total or sum of
+        // participants' individual revenues) so the worker breakdown shows
+        // the same number the user configured the card against.
+        const breakdownBase = result.poolBase ?? result.inputAmount;
         for (const pid of participants) {
           workerCommissions[pid] = (workerCommissions[pid] || 0) + perPerson;
           // Store a minimal breakdown so the dashboard can display the share.
@@ -182,7 +186,7 @@ export function executePipeline(
           // actually configured — not the per-worker formula_config rate.
           const priorAddedSalary = workerBreakdowns[pid]?.addedSalary ?? 0;
           workerBreakdowns[pid] = {
-            baseAmount: result.inputAmount,
+            baseAmount: breakdownBase,
             commissionRate: item.poolRate ?? 0,
             baseCommission: Math.round(perPerson * 100) / 100,
             addedSalary: priorAddedSalary > 0 ? priorAddedSalary : undefined,
@@ -375,7 +379,20 @@ function executeItem(
         .map(id => workerMap.get(id))
         .filter((w): w is Worker => w !== undefined);
 
-      const grossPool = Math.max(0, runningTotal) * (poolRate / 100);
+      // Determine what value the rate is applied to. Default ('pipeline')
+      // preserves the original behaviour for already-saved pipelines.
+      const baseSource = item.baseSource ?? 'pipeline';
+      let poolBase: number;
+      if (baseSource === 'participants_sum') {
+        poolBase = 0;
+        for (const w of participants) {
+          poolBase += workerInputs[w.id]?.individualRevenue ?? 0;
+        }
+      } else {
+        poolBase = Math.max(0, runningTotal);
+      }
+
+      const grossPool = Math.max(0, poolBase) * (poolRate / 100);
 
       let salaryDeducted = 0;
       if (item.deductParticipantSalaries) {
@@ -404,6 +421,8 @@ function executeItem(
           || (poolRate ? `Shared Pool (${poolRate}%)` : 'Shared Pool'),
         inputAmount: runningTotal,
         deductedAmount: deducted,
+        poolBase: Math.round(poolBase * 100) / 100,
+        poolBaseSource: baseSource,
         poolAmount: Math.round(grossPool * 100) / 100,
         poolSalaryDeducted: Math.round(salaryDeducted * 100) / 100,
         netPool: Math.round(netPool * 100) / 100,

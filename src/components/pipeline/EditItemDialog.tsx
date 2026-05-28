@@ -114,6 +114,11 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
   const [poolLabel, setPoolLabel] = useState(
     item.type === 'shared_pool_commission' ? item.label ?? '' : ''
   );
+  const [poolBaseSource, setPoolBaseSource] = useState<'pipeline' | 'participants_sum'>(
+    item.type === 'shared_pool_commission'
+      ? item.baseSource ?? 'pipeline'
+      : 'pipeline'
+  );
 
   // Constraint sets — "placed elsewhere" excludes the current item being edited
   const otherItems = rows.flatMap(r => r.items).filter(i => i.id !== item.id);
@@ -148,6 +153,7 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
         participantIds,
         deductParticipantSalaries,
         label: poolLabel.trim() || undefined,
+        baseSource: poolBaseSource,
       };
     }
 
@@ -252,6 +258,31 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
                 />
                 <span className="text-muted-foreground text-sm">%</span>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('sharedPoolBaseSource')}</Label>
+              <Select
+                value={poolBaseSource}
+                onValueChange={(v) => setPoolBaseSource(v as 'pipeline' | 'participants_sum')}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pipeline">
+                    {t('sharedPoolBasePipeline')}
+                  </SelectItem>
+                  <SelectItem value="participants_sum">
+                    {t('sharedPoolBaseParticipantsSum')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                {poolBaseSource === 'participants_sum'
+                  ? t('sharedPoolBaseParticipantsSumHint')
+                  : t('sharedPoolBasePipelineHint')}
+              </p>
             </div>
 
             <div className="space-y-1.5">
