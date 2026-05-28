@@ -31,6 +31,17 @@ interface EditItemDialogProps {
   onClose: () => void;
 }
 
+// Returns rounded average commissionRate for the given worker ids.
+// Returns null when there are no participants — caller should skip the update.
+function averageCommissionRate(ids: string[], workers: Worker[]): number | null {
+  if (ids.length === 0) return null;
+  const rates = ids.map(
+    id => workers.find(w => w.id === id)?.formula_config.commissionRate ?? 0
+  );
+  const avg = rates.reduce((s, r) => s + r, 0) / rates.length;
+  return Math.round(avg * 10) / 10;
+}
+
 export function EditItemDialog({
   item,
   rows,
@@ -304,11 +315,12 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
                           type="checkbox"
                           checked={checked}
                           onChange={(e) => {
-                            if (e.target.checked) {
-                              setParticipantIds(prev => [...prev, w.id]);
-                            } else {
-                              setParticipantIds(prev => prev.filter(id => id !== w.id));
-                            }
+                            const newIds = e.target.checked
+                              ? [...participantIds, w.id]
+                              : participantIds.filter(id => id !== w.id);
+                            setParticipantIds(newIds);
+                            const newRate = averageCommissionRate(newIds, workers);
+                            if (newRate !== null) setPoolRate(newRate);
                           }}
                           className="cursor-pointer"
                         />
