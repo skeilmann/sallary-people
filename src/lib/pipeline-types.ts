@@ -45,12 +45,12 @@ export interface PipelineItem {
   deductParticipantSalaries?: boolean;
 
   /** For 'shared_pool_commission' items: what value the poolRate is applied to.
-   *  - 'pipeline' (default): the pipeline's running total at this card's row
+   *  - 'participants_sum' (default): sum of each participant's individualRevenue
+   *    input. Use this when the team's bonus is funded from their own combined
+   *    sales rather than the company's total revenue.
+   *  - 'pipeline': the pipeline's running total at this card's row
    *    (company-wide, reduced by any taxes/expenses placed above).
-   *  - 'participants_sum': sum of each participant's individualRevenue input.
-   *    Use this when the team's bonus is funded from their own combined sales
-   *    rather than the company's total revenue.
-   *  Undefined behaves as 'pipeline' for backward compatibility. */
+   *  Undefined behaves as 'participants_sum'. */
   baseSource?: 'pipeline' | 'participants_sum';
 }
 

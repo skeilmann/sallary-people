@@ -379,9 +379,10 @@ function executeItem(
         .map(id => workerMap.get(id))
         .filter((w): w is Worker => w !== undefined);
 
-      // Determine what value the rate is applied to. Default ('pipeline')
-      // preserves the original behaviour for already-saved pipelines.
-      const baseSource = item.baseSource ?? 'pipeline';
+      // Determine what value the rate is applied to. Default is the sum of
+      // selected participants' individual revenues; switch to 'pipeline' via
+      // the modal's "Cotă din" dropdown to bill against the company total.
+      const baseSource = item.baseSource ?? 'participants_sum';
       let poolBase: number;
       if (baseSource === 'participants_sum') {
         poolBase = 0;

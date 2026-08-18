@@ -23,6 +23,12 @@ interface AuthContextValue {
   dismissMigration: () => void;
 }
 
+// How long to wait for the initial getSession() before giving up and treating
+// the visitor as signed out. auth-js retries a token refresh internally, so an
+// unreachable Supabase host leaves the promise pending far longer than any
+// user will wait staring at a spinner.
+const AUTH_INIT_TIMEOUT_MS = 8000;
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -59,13 +65,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
     let cancelled = false;
+    let settled = false;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
+    // Resolve the initial auth check exactly once, however it turns out. If this
+    // is skipped, `loading` never flips and every page renders a spinner with no
+    // way out: a paused Supabase project drops its DNS record, so the token
+    // refresh that getSession() kicks off neither resolves nor rejects promptly.
+    // Declared as a hoisted function so it can reference initTimeout below.
+    function settle(nextSession: Session | null) {
+      if (cancelled || settled) return;
+      settled = true;
+      clearTimeout(initTimeout);
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
       setLoading(false);
-    });
+    }
+
+    const initTimeout = setTimeout(() => {
+      if (cancelled || settled) return;
+      console.error(
+        `Auth: getSession() did not respond within ${AUTH_INIT_TIMEOUT_MS}ms; ` +
+          'treating the visitor as signed out. Check that the Supabase project ' +
+          'is reachable — a paused project stops resolving in DNS.'
+      );
+      settle(null);
+    }, AUTH_INIT_TIMEOUT_MS);
+
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) console.error('Auth: getSession() returned an error:', error);
+        settle(data.session);
+      })
+      .catch((err) => {
+        console.error('Auth: getSession() failed:', err);
+        settle(null);
+      });
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
@@ -81,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      clearTimeout(initTimeout);
       sub.subscription.unsubscribe();
     };
   }, [runMigration]);

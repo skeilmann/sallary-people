@@ -190,6 +190,7 @@ export function ItemPalette({ rows, workers, onAddItem }: ItemPaletteProps) {
                   poolRate: 0,
                   participantIds: [],
                   deductParticipantSalaries: false,
+                  baseSource: 'participants_sum',
                 };
                 onAddItem(item);
               }}

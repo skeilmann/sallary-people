@@ -127,8 +127,8 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
   );
   const [poolBaseSource, setPoolBaseSource] = useState<'pipeline' | 'participants_sum'>(
     item.type === 'shared_pool_commission'
-      ? item.baseSource ?? 'pipeline'
-      : 'pipeline'
+      ? item.baseSource ?? 'participants_sum'
+      : 'participants_sum'
   );
 
   // Constraint sets — "placed elsewhere" excludes the current item being edited
