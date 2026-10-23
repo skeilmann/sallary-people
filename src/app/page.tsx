@@ -35,6 +35,7 @@ import {
   buildWorkerInputs,
   explainPipeline,
   hasUnsavedChanges,
+  isPaidPerDay,
   isSeller,
   savedAdjustments,
   sellersTotal,
@@ -81,7 +82,7 @@ function DashboardPageContent() {
 
   // This quarter's sales, company total and what-if bonuses.
   const quarterInputs = useQuarterInputs(currentPeriod, workers, calculationsByWorker);
-  const { sales, companyRevenue, latestSaved, whatIf } = quarterInputs;
+  const { sales, days, companyRevenue, latestSaved, whatIf } = quarterInputs;
 
   // Historical calculations for comparison
   const [historicalCalculations, setHistoricalCalculations] = useState<CalculationWithWorker[]>([]);
@@ -159,7 +160,10 @@ function DashboardPageContent() {
     }),
     [globalInputs.taxRate1, globalInputs.taxRate2, companyRevenue],
   );
-  const workerInputs = useMemo(() => buildWorkerInputs(workers, sales), [workers, sales]);
+  const workerInputs = useMemo(
+    () => buildWorkerInputs(workers, sales, days),
+    [workers, sales, days],
+  );
 
   const result = useMemo(
     () => pipeline && pipeline.rows.length > 0
@@ -238,6 +242,7 @@ function DashboardPageContent() {
             salary: worker?.formula_config.salaryAmount ?? 0,
             individualRevenue: seller ? sales[row.workerId] ?? 0 : undefined,
             companyRevenue,
+            daysWorked: worker && isPaidPerDay(worker) ? days[row.workerId] ?? 0 : undefined,
           },
           calculated_amount: row.calculatedAmount,
           adjustment_amount: row.adjustmentAmount,
@@ -342,6 +347,9 @@ function DashboardPageContent() {
               sellers={sellers}
               sales={sales}
               onSaleChange={quarterInputs.setSale}
+              dayWorkers={workers.filter(isPaidPerDay)}
+              days={days}
+              onDaysChange={quarterInputs.setDays}
               typedCompanyRevenue={quarterInputs.typedCompanyRevenue}
               sellersTotal={sellersTotal(workers, sales)}
               onCompanyRevenueChange={quarterInputs.setCompanyRevenue}

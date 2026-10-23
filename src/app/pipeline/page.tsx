@@ -105,9 +105,11 @@ function PipelinePageContent() {
     };
   }, [currentPeriod]);
 
-  // This quarter's company total (typed, or the sellers' total), shared with
-  // the builder and the Dashboard.
-  const { companyRevenue } = useQuarterInputs(currentPeriod, workers, calculationsByWorker);
+  // This quarter's company total (typed, or the sellers' total) and days
+  // worked, shared with the builder and the Dashboard.
+  const { companyRevenue, days } = useQuarterInputs(currentPeriod, workers, calculationsByWorker);
+  const daysWorkedFor = (worker: Worker) =>
+    worker.formula_config.salaryPeriod === 'daily' ? days[worker.id] ?? 0 : undefined;
 
   const refreshCalculationsForPeriod = async () => {
     const refreshed = await getCalculationsByWorkerForPeriod(currentPeriod).catch(() => null);
@@ -155,6 +157,7 @@ function PipelinePageContent() {
         salary: data.salary,
         individualRevenue: isIndividual ? data.individualRevenue : undefined,
         companyRevenue,
+        daysWorked: daysWorkedFor(worker),
       };
 
       await createCalculation({
@@ -198,6 +201,7 @@ function PipelinePageContent() {
           salary: r.salary,
           individualRevenue: isIndividual ? r.individualRevenue : undefined,
           companyRevenue,
+          daysWorked: daysWorkedFor(worker),
         };
         await createCalculation({
           worker_id: r.workerId,

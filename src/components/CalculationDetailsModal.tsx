@@ -56,7 +56,13 @@ export function CalculationDetailsModal({
                   .map(([key, value]) => (
                     <div key={key} className="flex justify-between text-sm">
                       <span className="capitalize">{key.replace('_', ' ')}</span>
-                      <span>{typeof value === 'number' ? formatCurrency(value) : value}</span>
+                      <span>
+                        {typeof value !== 'number'
+                          ? value
+                          : key === 'daysWorked'
+                            ? value
+                            : formatCurrency(value)}
+                      </span>
                     </div>
                   ))}
               </div>

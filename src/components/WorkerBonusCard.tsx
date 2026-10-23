@@ -18,7 +18,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { Worker, GlobalCalculationInputs, FormulaConfig } from '@/lib/types';
+import type { Worker, GlobalCalculationInputs, FormulaConfig, SalaryPeriod } from '@/lib/types';
 import {
   Select,
   SelectContent,
@@ -56,6 +56,8 @@ interface WorkerBonusCardProps {
   /** The pipeline steps that decide this worker's bonus, explained in the
    *  bonus window. */
   pipelineSteps?: ExplainedStep[];
+  /** Days worked this quarter, for workers paid per day. */
+  daysWorked?: number;
   /**
    * Latest saved calculation for the currently selected period, used to
    * pre-fill the editing modal (salary, adjustment slider, note). When null
@@ -98,6 +100,7 @@ export function WorkerBonusCard({
   pipelineBaseAmount,
   pipelineSalaryDeducted,
   pipelineSteps,
+  daysWorked,
   savedSnapshot,
   showSelectionCheckbox,
   isSelected,
@@ -127,7 +130,7 @@ export function WorkerBonusCard({
   const [editSalaryAmount, setEditSalaryAmount] = useState(
     worker.formula_config.salaryAmount ?? 0,
   );
-  const [editSalaryPeriod, setEditSalaryPeriod] = useState<'monthly' | 'quarterly'>(
+  const [editSalaryPeriod, setEditSalaryPeriod] = useState<SalaryPeriod>(
     worker.formula_config.salaryPeriod ?? 'quarterly',
   );
   const [editRevenueSource, setEditRevenueSource] = useState<'global' | 'individual'>(
@@ -200,6 +203,7 @@ export function WorkerBonusCard({
   const quarterlySalary = getEffectiveSalary(
     config,
     worker.formula_config.salaryAmount ?? 0,
+    daysWorked,
   );
   const grandTotal = calculatedAmount + quarterlySalary;
 
@@ -329,7 +333,7 @@ export function WorkerBonusCard({
                 pipelineBaseAmount ?? globalInputs.totalRevenue,
               );
               const rawSalary = worker.formula_config.salaryAmount ?? 0;
-              const effectiveSalary = pipelineSalaryDeducted ?? getEffectiveSalary(config, rawSalary);
+              const effectiveSalary = pipelineSalaryDeducted ?? getEffectiveSalary(config, rawSalary, daysWorked);
               const isMonthly = config.salaryPeriod === 'monthly';
               return (
                 <p className="text-xs text-muted-foreground mb-1">
@@ -566,7 +570,9 @@ export function WorkerBonusCard({
                       && ` · ${formatCurrency(worker.formula_config.salaryAmount ?? 0)}${
                         (worker.formula_config.salaryPeriod ?? 'quarterly') === 'monthly'
                           ? t('perMonthShort')
-                          : ''
+                          : worker.formula_config.salaryPeriod === 'daily'
+                            ? t('perDayShort')
+                            : ''
                       }`}
                   </span>
                 </summary>
@@ -604,13 +610,15 @@ export function WorkerBonusCard({
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1.5">
                       <Label htmlFor={`ws-salary-${worker.id}`} className="text-xs">
-                        {tWorkers('form.defaultSalary')}
+                        {editSalaryPeriod === 'daily'
+                          ? tWorkers('form.dailyRate')
+                          : tWorkers('form.defaultSalary')}
                       </Label>
                       <Input
                         id={`ws-salary-${worker.id}`}
                         type="number"
                         min="0"
-                        step="100"
+                        step={editSalaryPeriod === 'daily' ? '1' : '100'}
                         value={editSalaryAmount}
                         onChange={(e) =>
                           setEditSalaryAmount(parseFloat(e.target.value) || 0)
@@ -625,7 +633,7 @@ export function WorkerBonusCard({
                       <Select
                         value={editSalaryPeriod}
                         onValueChange={(v) =>
-                          setEditSalaryPeriod(v as 'monthly' | 'quarterly')
+                          setEditSalaryPeriod(v as SalaryPeriod)
                         }
                       >
                         <SelectTrigger className="h-8 text-sm">
@@ -637,6 +645,9 @@ export function WorkerBonusCard({
                           </SelectItem>
                           <SelectItem value="monthly">
                             {tWorkers('form.salaryPeriodMonthly')}
+                          </SelectItem>
+                          <SelectItem value="daily">
+                            {tWorkers('form.salaryPeriodDaily')}
                           </SelectItem>
                         </SelectContent>
                       </Select>

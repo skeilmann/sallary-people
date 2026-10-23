@@ -144,7 +144,10 @@
     "whatIfResult": "Bonus {bonus} → total pay {total}",
     "whatIfEmpty": "No bonus",
     "whatIfPay": "Pay this quarter",
-    "whatIfSummary": "With all these bonuses the company would keep {after} instead of {before}."
+    "whatIfSummary": "With all these bonuses the company would keep {after} instead of {before}.",
+    "daysWorked": "Days {name} worked",
+    "daysSalary": "{rate} per day = {total} for the quarter",
+    "daysTimesRate": "{days} days × {rate}"
   },
   "workers": {
     "title": "Workers",
@@ -169,11 +172,13 @@
       "salaryPeriod": "Salary period",
       "salaryPeriodQuarterly": "Quarterly (full quarter amount)",
       "salaryPeriodMonthly": "Monthly (× 3 for the quarter)",
-      "salaryPeriodHelp": "Choose whether the amount above represents a full quarter or one month. Monthly amounts are multiplied by 3 when deducted.",
+      "salaryPeriodHelp": "Choose what the amount above is: a full quarter, one month (× 3), or one day (× the days worked, typed each quarter on the Dashboard).",
       "revenueSource": "Revenue Source",
       "revenueSourceGlobal": "Total Company Revenue",
       "revenueSourceIndividual": "Individual Sales Revenue",
-      "revenueSourceHelp": "Choose whether bonus is calculated from total revenue or this worker's individual sales"
+      "revenueSourceHelp": "Choose whether bonus is calculated from total revenue or this worker's individual sales",
+      "salaryPeriodDaily": "Per day (× days worked in the quarter)",
+      "dailyRate": "Pay per day"
     },
     "metrics": {
       "revenue": "Revenue",
@@ -304,7 +309,8 @@
     "grandTotalTooltip": "Bonus {bonus} + quarterly salary {salary}",
     "workerSettings": "Worker settings",
     "saveWorkerSettings": "Update worker",
-    "bonusForQuarter": "Bonus for the quarter"
+    "bonusForQuarter": "Bonus for the quarter",
+    "perDayShort": "/day"
   },
   "workerHistory": {
     "historyFor": "History for {name}",

@@ -82,6 +82,34 @@ describe('company rules', () => {
   });
 });
 
+describe('salary paid per day', () => {
+  it('is the daily rate times the days worked, also when a pool deducts it', () => {
+    const dayWorker = makeWorker('Dan', {
+      commissionRate: 4, salaryAmount: 100, salaryPeriod: 'daily', revenueSource: 'individual',
+    });
+    const pipeline = makePipeline([[{
+      type: 'shared_pool_commission', poolRate: 10, participantIds: ['Dan'],
+      baseSource: 'participants_sum', deductParticipantSalaries: true,
+    }]]);
+    const result = executePipeline(
+      pipeline, { totalRevenue: 50_000, ...noTax }, [dayWorker],
+      { Dan: { salary: 100, individualRevenue: 50_000, daysWorked: 20 } },
+    );
+    const pool = result.rowResults[0].itemResults[0];
+    expect(pool.poolSalaryDeducted).toBe(2_000); // 20 days × 100
+    expect(result.workerCommissions.Dan).toBe(3_000); // 5,000 − 2,000
+  });
+
+  it('is 0 when no days are typed', () => {
+    const dayWorker = makeWorker('Dan', { commissionRate: 0, salaryAmount: 100, salaryPeriod: 'daily' });
+    const result = executePipeline(
+      makePipeline([[{ type: 'salary', workerId: 'Dan' }]]),
+      { totalRevenue: 10_000, ...noTax }, [dayWorker], { Dan: { salary: 100 } },
+    );
+    expect(result.finalRunningTotal).toBe(10_000);
+  });
+});
+
 describe('salary cards', () => {
   const revenue = { totalRevenue: 100_000, ...noTax };
 

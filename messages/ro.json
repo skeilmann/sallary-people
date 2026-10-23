@@ -144,7 +144,10 @@
     "whatIfResult": "Bonus {bonus} → total de plată {total}",
     "whatIfEmpty": "Fără bonus",
     "whatIfPay": "Plătește în acest trimestru",
-    "whatIfSummary": "Cu toate aceste bonusuri, companiei i-ar rămâne {after} în loc de {before}."
+    "whatIfSummary": "Cu toate aceste bonusuri, companiei i-ar rămâne {after} în loc de {before}.",
+    "daysWorked": "Zile lucrate de {name}",
+    "daysSalary": "{rate} pe zi = {total} pe trimestru",
+    "daysTimesRate": "{days} zile × {rate}"
   },
   "workers": {
     "title": "Angajați",
@@ -169,11 +172,13 @@
       "salaryPeriod": "Perioada salariului",
       "salaryPeriodQuarterly": "Trimestrial (suma pe tot trimestrul)",
       "salaryPeriodMonthly": "Lunar (× 3 pentru trimestru)",
-      "salaryPeriodHelp": "Alege dacă suma de mai sus reprezintă un trimestru întreg sau o lună. Sumele lunare sunt înmulțite cu 3 când sunt deduse.",
+      "salaryPeriodHelp": "Alege ce reprezintă suma de mai sus: un trimestru întreg, o lună (× 3) sau o zi (× zilele lucrate, introduse în fiecare trimestru în Panoul Principal).",
       "revenueSource": "Sursa Veniturilor",
       "revenueSourceGlobal": "Venituri Totale Companie",
       "revenueSourceIndividual": "Venituri Vânzări Individuale",
-      "revenueSourceHelp": "Alege dacă bonusul se calculează din veniturile totale sau din vânzările individuale ale acestui angajat"
+      "revenueSourceHelp": "Alege dacă bonusul se calculează din veniturile totale sau din vânzările individuale ale acestui angajat",
+      "salaryPeriodDaily": "Pe zi (× zilele lucrate în trimestru)",
+      "dailyRate": "Plată pe zi"
     },
     "metrics": {
       "revenue": "Venituri",
@@ -304,7 +309,8 @@
     "grandTotalTooltip": "Bonus {bonus} + salariu trimestrial {salary}",
     "workerSettings": "Setări angajat",
     "saveWorkerSettings": "Actualizează angajat",
-    "bonusForQuarter": "Bonus pe trimestru"
+    "bonusForQuarter": "Bonus pe trimestru",
+    "perDayShort": "/zi"
   },
   "workerHistory": {
     "historyFor": "Istoric pentru {name}",

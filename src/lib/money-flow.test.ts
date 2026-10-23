@@ -66,6 +66,25 @@ describe('summarizeMoneyFlow', () => {
     expect(francesca).toMatchObject({ quarterSalary: 3_600, bonus: 0, hasRule: false, totalPay: 3_600 });
   });
 
+  it('pays someone on a daily rate for the days worked, plus the bonus', () => {
+    const totalRevenue = resolveCompanyRevenue(undefined, companyWorkers, sales);
+    const workerInputs = buildWorkerInputs(companyWorkers, sales, { George: 25 });
+    expect(workerInputs.George.daysWorked).toBe(25);
+    expect(workerInputs.Kiril.daysWorked).toBeUndefined();
+    const result = executePipeline(
+      companyPipeline, { totalRevenue, taxRate1: 0, taxRate2: 0 }, companyWorkers, workerInputs,
+    );
+    const flow = summarizeMoneyFlow(result, companyWorkers, workerInputs);
+    const george = flow.people.find((p) => p.workerId === 'George')!;
+    expect(george).toMatchObject({
+      quarterSalary: 3_000, // 25 days × 120
+      perDay: { days: 25, rate: 120 },
+      bonus: 1_500, // 1% of all company sales, unchanged
+      totalPay: 4_500,
+    });
+    expect(flow.salaries).toBe(12_600 + 3_000);
+  });
+
   it('adds what-if bonuses on top, and they reduce what the company keeps', () => {
     const { result, workerInputs, globalInputs } = runQuarter();
     const extra = {
@@ -148,6 +167,13 @@ describe('seedFromSaved', () => {
     // 150,000 is just the sellers' total, so it was not typed.
     expect(seed.companyRevenue).toBeUndefined();
     expect(seed.whatIf.Lorenzo).toEqual({ mode: 'fixed', value: 500, pay: true });
+  });
+
+  it('restores the days worked of people paid per day', () => {
+    const seed = seedFromSaved(companyWorkers, {
+      George: { ...saved('George', 1_500), inputs: { baseValue: 150_000, companyRevenue: 150_000, daysWorked: 25 } },
+    });
+    expect(seed.days).toEqual({ George: 25 });
   });
 
   it('restores a typed company total, also from older records without companyRevenue', () => {

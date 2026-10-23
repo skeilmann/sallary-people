@@ -7,7 +7,10 @@ import type {
 import { calculateFinalAmount, getEffectiveSalary } from './formulas';
 
 /** Per-worker inputs in the shape the pipeline engine expects. */
-export type WorkerInputs = Record<string, { salary?: number; individualRevenue?: number }>;
+export type WorkerInputs = Record<
+  string,
+  { salary?: number; individualRevenue?: number; daysWorked?: number }
+>;
 
 function roundCents(value: number): number {
   return Math.round(value * 100) / 100;
@@ -17,11 +20,21 @@ export function isSeller(worker: Worker): boolean {
   return worker.formula_config.revenueSource === 'individual';
 }
 
-/** Salary for the whole quarter (monthly salaries count three times). */
-export function quarterSalary(worker: Worker, rawSalary?: number): number {
+/** True for workers whose salary is a pay per day worked. */
+export function isPaidPerDay(worker: Worker): boolean {
+  return worker.formula_config.salaryPeriod === 'daily';
+}
+
+/** Salary for the whole quarter (monthly salaries count three times, daily
+ *  ones once per day worked). */
+export function quarterSalary(
+  worker: Worker,
+  input?: { salary?: number; daysWorked?: number },
+): number {
   return getEffectiveSalary(
     worker.formula_config,
-    rawSalary ?? worker.formula_config.salaryAmount ?? 0,
+    input?.salary ?? worker.formula_config.salaryAmount ?? 0,
+    input?.daysWorked,
   );
 }
 
@@ -46,12 +59,17 @@ export function resolveCompanyRevenue(
     : sellersTotal(workers, sales);
 }
 
-export function buildWorkerInputs(workers: Worker[], sales: Record<string, number>): WorkerInputs {
+export function buildWorkerInputs(
+  workers: Worker[],
+  sales: Record<string, number>,
+  daysWorked: Record<string, number> = {},
+): WorkerInputs {
   const inputs: WorkerInputs = {};
   for (const w of workers) {
     inputs[w.id] = {
       salary: w.formula_config.salaryAmount,
       individualRevenue: isSeller(w) ? sales[w.id] ?? 0 : undefined,
+      daysWorked: isPaidPerDay(w) ? daysWorked[w.id] ?? 0 : undefined,
     };
   }
   return inputs;
@@ -128,7 +146,7 @@ export function explainPipeline(
               id: w.id,
               name: w.name,
               sales: workerInputs[w.id]?.individualRevenue ?? 0,
-              quarterSalary: quarterSalary(w, workerInputs[w.id]?.salary),
+              quarterSalary: quarterSalary(w, workerInputs[w.id]),
             }));
           steps.push({
             kind: 'pool',
@@ -241,6 +259,8 @@ export interface PersonPay {
   workerId: string;
   name: string;
   quarterSalary: number;
+  /** For workers paid per day: how the quarter salary was made up. */
+  perDay?: { days: number; rate: number };
   /** True when a commission or shared-pool card gives this person a bonus. */
   hasRule: boolean;
   /** Bonus from the pipeline rules. */
@@ -287,7 +307,7 @@ export function summarizeMoneyFlow(
   }
 
   const people: PersonPay[] = workers.map((w) => {
-    const salary = quarterSalary(w, workerInputs[w.id]?.salary);
+    const salary = quarterSalary(w, workerInputs[w.id]);
     const hasRule = result.workerBreakdowns[w.id] !== undefined;
     const bonus = hasRule ? result.workerCommissions[w.id] ?? 0 : 0;
     const extraBonus = roundCents(extraBonuses[w.id] ?? 0);
@@ -297,6 +317,12 @@ export function summarizeMoneyFlow(
       workerId: w.id,
       name: w.name,
       quarterSalary: salary,
+      perDay: isPaidPerDay(w)
+        ? {
+            days: workerInputs[w.id]?.daysWorked ?? 0,
+            rate: workerInputs[w.id]?.salary ?? w.formula_config.salaryAmount ?? 0,
+          }
+        : undefined,
       hasRule,
       bonus,
       extraBonus,
@@ -342,6 +368,8 @@ export function whatIfAmount(whatIf: WhatIfBonus | undefined, companyRevenue: nu
 
 export interface QuarterSeed {
   sales: Record<string, number>;
+  /** Days worked by people paid per day. */
+  days: Record<string, number>;
   /** Company total typed when the quarter was saved; undefined when it was
    *  simply the sellers' total. */
   companyRevenue?: number;
@@ -354,6 +382,7 @@ export function seedFromSaved(
   latestSaved: Record<string, CalculationWithWorker | undefined>,
 ): QuarterSeed {
   const sales: Record<string, number> = {};
+  const days: Record<string, number> = {};
   const whatIf: Record<string, WhatIfBonus> = {};
   let companyRevenue: number | undefined;
 
@@ -363,6 +392,9 @@ export function seedFromSaved(
     const inputs = calc.inputs;
     if (isSeller(w) && typeof inputs.individualRevenue === 'number') {
       sales[w.id] = inputs.individualRevenue;
+    }
+    if (isPaidPerDay(w) && typeof inputs.daysWorked === 'number') {
+      days[w.id] = inputs.daysWorked;
     }
     if (typeof inputs.companyRevenue === 'number') {
       companyRevenue ??= inputs.companyRevenue;
@@ -377,7 +409,7 @@ export function seedFromSaved(
   if (companyRevenue !== undefined && companyRevenue === sellersTotal(workers, sales)) {
     companyRevenue = undefined;
   }
-  return { sales, companyRevenue, whatIf };
+  return { sales, days, companyRevenue, whatIf };
 }
 
 // ============ Saving a quarter ============

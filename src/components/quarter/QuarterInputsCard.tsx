@@ -25,6 +25,10 @@ interface QuarterInputsCardProps {
   sellers: Worker[];
   sales: Record<string, number>;
   onSaleChange: (workerId: string, value: number) => void;
+  /** People paid per day: their days worked are typed each quarter. */
+  dayWorkers: Worker[];
+  days: Record<string, number>;
+  onDaysChange: (workerId: string, value: number) => void;
   typedCompanyRevenue: number | undefined;
   sellersTotal: number;
   onCompanyRevenueChange: (value: number | undefined) => void;
@@ -49,6 +53,9 @@ export function QuarterInputsCard({
   sellers,
   sales,
   onSaleChange,
+  dayWorkers,
+  days,
+  onDaysChange,
   typedCompanyRevenue,
   sellersTotal,
   onCompanyRevenueChange,
@@ -109,6 +116,32 @@ export function QuarterInputsCard({
               <AmountEcho value={sales[seller.id] ?? 0} />
             </div>
           ))}
+
+          {dayWorkers.map((worker) => {
+            const rate = worker.formula_config.salaryAmount ?? 0;
+            const workedDays = days[worker.id] ?? 0;
+            return (
+              <div key={worker.id} className="space-y-2">
+                <Label htmlFor={`days-${worker.id}`}>{t('daysWorked', { name: worker.name })}</Label>
+                <Input
+                  id={`days-${worker.id}`}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="1"
+                  value={workedDays || ''}
+                  onChange={(e) => onDaysChange(worker.id, parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {t('daysSalary', {
+                    rate: formatCurrency(rate),
+                    total: formatCurrency(rate * workedDays),
+                  })}
+                </p>
+              </div>
+            );
+          })}
 
           <div className="space-y-2">
             <Label htmlFor="company-sales">{t('companySales')}</Label>

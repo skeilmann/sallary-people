@@ -27,7 +27,7 @@ export function executePipeline(
   pipeline: CalculationPipeline,
   globalInputs: GlobalCalculationInputs,
   workers: Worker[],
-  workerInputs: Record<string, { salary?: number; individualRevenue?: number }>
+  workerInputs: Record<string, { salary?: number; individualRevenue?: number; daysWorked?: number }>
 ): PipelineExecutionResult {
   const workerMap = new Map(workers.map(w => [w.id, w]));
   const workerCommissions: Record<string, number> = {};
@@ -86,7 +86,7 @@ export function executePipeline(
           ?? worker?.formula_config.salaryAmount
           ?? 0;
         const salaryAmount = worker
-          ? getEffectiveSalary(worker.formula_config, rawSalary)
+          ? getEffectiveSalary(worker.formula_config, rawSalary, workerInputs[item.workerId]?.daysWorked)
           : rawSalary;
         // Same-row commission cards don't count, and an earlier salary card
         // in this row may already have used part of the bonus.
@@ -221,7 +221,7 @@ export function executePipeline(
         const w = workerMap.get(item.workerId);
         if (w && w.formula_config.revenueSource === 'individual') {
           const rawSalary = workerInputs[w.id]?.salary ?? w.formula_config.salaryAmount ?? 0;
-          const salaryAmount = getEffectiveSalary(w.formula_config, rawSalary);
+          const salaryAmount = getEffectiveSalary(w.formula_config, rawSalary, workerInputs[w.id]?.daysWorked);
           individualBases[w.id] = Math.max(0, (individualBases[w.id] ?? 0) - salaryAmount);
         }
       } else if (item.type === 'tax') {
@@ -280,7 +280,7 @@ function executeItem(
   individualBasesBefore: Record<string, number>,
   globalInputs: GlobalCalculationInputs,
   workerMap: Map<string, Worker>,
-  workerInputs: Record<string, { salary?: number; individualRevenue?: number }>
+  workerInputs: Record<string, { salary?: number; individualRevenue?: number; daysWorked?: number }>
 ): PipelineItemResult {
   switch (item.type) {
     case 'tax': {
@@ -304,7 +304,7 @@ function executeItem(
         ? (workerInputs[item.workerId]?.salary ?? worker?.formula_config.salaryAmount ?? 0)
         : 0;
       const salaryAmount = worker
-        ? getEffectiveSalary(worker.formula_config, rawSalary)
+        ? getEffectiveSalary(worker.formula_config, rawSalary, workerInputs[worker.id]?.daysWorked)
         : rawSalary;
       return {
         itemId: item.id,
@@ -399,7 +399,7 @@ function executeItem(
           const rawSalary = workerInputs[w.id]?.salary
             ?? w.formula_config.salaryAmount
             ?? 0;
-          salaryDeducted += getEffectiveSalary(w.formula_config, rawSalary);
+          salaryDeducted += getEffectiveSalary(w.formula_config, rawSalary, workerInputs[w.id]?.daysWorked);
         }
       }
 

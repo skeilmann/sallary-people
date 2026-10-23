@@ -65,6 +65,7 @@ import { formatCurrency } from '@/lib/formulas';
 import {
   buildWorkerInputs,
   explainPipeline,
+  isPaidPerDay,
   sellersTotal,
   stepInvolvesWorker,
 } from '@/lib/money-flow';
@@ -202,7 +203,9 @@ export function PipelineBuilder({
   // Sales and company total for the selected quarter, shared with the
   // Dashboard. A saved quarter shows its saved numbers until edited.
   const quarterInputs = useQuarterInputs(period, workers, calculationsByWorker);
-  const { sales, setSale, typedCompanyRevenue, companyRevenue, setCompanyRevenue } = quarterInputs;
+  const {
+    sales, setSale, days, setDays, typedCompanyRevenue, companyRevenue, setCompanyRevenue,
+  } = quarterInputs;
   const engineGlobalInputs = useMemo(
     () => ({ ...globalInputs, totalRevenue: companyRevenue }),
     [globalInputs, companyRevenue],
@@ -227,7 +230,10 @@ export function PipelineBuilder({
   );
 
   // Build worker inputs for execution from this quarter's sales
-  const workerInputs = useMemo(() => buildWorkerInputs(workers, sales), [workers, sales]);
+  const workerInputs = useMemo(
+    () => buildWorkerInputs(workers, sales, days),
+    [workers, sales, days],
+  );
 
   const pipelineForExec: CalculationPipeline = useMemo(() => ({
     id: pipeline?.id ?? '',
@@ -634,6 +640,29 @@ export function PipelineBuilder({
                   </div>
                 </div>
               )}
+
+              {/* Days worked for people paid per day */}
+              {workers.some(isPaidPerDay) && (
+                <div className="mt-4 pt-3 border-t grid gap-2 sm:grid-cols-2">
+                  {workers.filter(isPaidPerDay).map(w => (
+                    <div key={w.id} className="flex items-center gap-2">
+                      <Label htmlFor={`pipeline-days-${w.id}`} className="text-xs min-w-[80px]">
+                        {tDashboard('daysWorked', { name: w.name })}
+                      </Label>
+                      <Input
+                        id={`pipeline-days-${w.id}`}
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={days[w.id] || ''}
+                        onChange={(e) => setDays(w.id, parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -874,6 +903,7 @@ export function PipelineBuilder({
                     globalInputs={engineGlobalInputs}
                     individualRevenue={readIndividualRevenue(worker.id)}
                     onIndividualRevenueChange={(value) => setSale(worker.id, value)}
+                    daysWorked={days[worker.id]}
                     pipelineCommissionAmount={pipelineCommission}
                     pipelineBaseAmount={pipelineBreakdown?.baseAmount}
                     pipelineSalaryDeducted={pipelineSalaryByWorker[worker.id]}

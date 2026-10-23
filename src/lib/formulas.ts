@@ -1,10 +1,16 @@
 import type { FormulaConfig, CalculationInputs, GlobalCalculationInputs } from './types';
 
 /**
- * The entered salary may represent either a single month or the full quarter.
- * The bonus period is quarterly, so monthly amounts are multiplied by 3.
+ * The entered salary may represent a single month, the full quarter, or one
+ * day. The bonus period is quarterly, so monthly amounts are multiplied by 3
+ * and daily amounts by the days worked in the quarter.
  */
-export function getEffectiveSalary(config: FormulaConfig, rawSalary: number): number {
+export function getEffectiveSalary(
+  config: FormulaConfig,
+  rawSalary: number,
+  daysWorked = 0,
+): number {
+  if (config.salaryPeriod === 'daily') return Math.round(rawSalary * daysWorked * 100) / 100;
   return config.salaryPeriod === 'monthly' ? rawSalary * 3 : rawSalary;
 }
 

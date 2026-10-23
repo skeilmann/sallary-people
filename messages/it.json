@@ -144,7 +144,10 @@
     "whatIfResult": "Bonus {bonus} → totale da pagare {total}",
     "whatIfEmpty": "Nessun bonus",
     "whatIfPay": "Paga in questo trimestre",
-    "whatIfSummary": "Con tutti questi bonus all'azienda resterebbero {after} invece di {before}."
+    "whatIfSummary": "Con tutti questi bonus all'azienda resterebbero {after} invece di {before}.",
+    "daysWorked": "Giorni lavorati da {name}",
+    "daysSalary": "{rate} al giorno = {total} per il trimestre",
+    "daysTimesRate": "{days} giorni × {rate}"
   },
   "workers": {
     "title": "Dipendenti",
@@ -169,11 +172,13 @@
       "salaryPeriod": "Periodo dello stipendio",
       "salaryPeriodQuarterly": "Trimestrale (importo dell'intero trimestre)",
       "salaryPeriodMonthly": "Mensile (× 3 per il trimestre)",
-      "salaryPeriodHelp": "Scegli se l'importo sopra rappresenta un trimestre completo o un mese. Gli importi mensili vengono moltiplicati per 3 quando dedotti.",
+      "salaryPeriodHelp": "Scegli cosa rappresenta l'importo sopra: un trimestre completo, un mese (× 3) o un giorno (× i giorni lavorati, inseriti ogni trimestre nella Dashboard).",
       "revenueSource": "Fonte del Fatturato",
       "revenueSourceGlobal": "Fatturato Totale Aziendale",
       "revenueSourceIndividual": "Fatturato Vendite Individuali",
-      "revenueSourceHelp": "Scegli se il bonus viene calcolato dal fatturato totale o dalle vendite individuali di questo dipendente"
+      "revenueSourceHelp": "Scegli se il bonus viene calcolato dal fatturato totale o dalle vendite individuali di questo dipendente",
+      "salaryPeriodDaily": "Al giorno (× giorni lavorati nel trimestre)",
+      "dailyRate": "Paga giornaliera"
     },
     "metrics": {
       "revenue": "Fatturato",
@@ -304,7 +309,8 @@
     "grandTotalTooltip": "Bonus {bonus} + stipendio trimestrale {salary}",
     "workerSettings": "Impostazioni dipendente",
     "saveWorkerSettings": "Aggiorna dipendente",
-    "bonusForQuarter": "Bonus del trimestre"
+    "bonusForQuarter": "Bonus del trimestre",
+    "perDayShort": "/giorno"
   },
   "workerHistory": {
     "historyFor": "Storico per {name}",

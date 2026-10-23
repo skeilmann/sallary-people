@@ -46,7 +46,8 @@ export const liuba = makeWorker('Liuba', {
   commissionRate: 4, salaryAmount: 550, salaryPeriod: 'monthly', revenueSource: 'individual',
 });
 export const costea = makeWorker('Costea', { commissionRate: 10, revenueSource: 'individual' });
-export const george = makeWorker('George', { commissionRate: 1 });
+// Paid per day worked (the rate here is made up for the tests).
+export const george = makeWorker('George', { commissionRate: 1, salaryAmount: 120, salaryPeriod: 'daily' });
 export const francesca = makeWorker('Francesca', { commissionRate: 0, salaryAmount: 1200, salaryPeriod: 'monthly' });
 export const lorenzo = makeWorker('Lorenzo', { commissionRate: 0, salaryAmount: 1000, salaryPeriod: 'monthly' });
 

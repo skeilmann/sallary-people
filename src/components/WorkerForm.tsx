@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import type { Worker, FormulaConfig } from '@/lib/types';
+import type { Worker, FormulaConfig, SalaryPeriod } from '@/lib/types';
 import { defaultFormulaConfig } from '@/lib/types';
 
 interface WorkerFormProps {
@@ -204,12 +204,14 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
               {t('form.salaryPipelineNote')}
             </p>
             <div className="space-y-2">
-              <Label htmlFor="salaryAmount">{t('form.defaultSalary')}</Label>
+              <Label htmlFor="salaryAmount">
+                {config.salaryPeriod === 'daily' ? t('form.dailyRate') : t('form.defaultSalary')}
+              </Label>
               <Input
                 id="salaryAmount"
                 type="number"
                 min="0"
-                step="100"
+                step={config.salaryPeriod === 'daily' ? '1' : '100'}
                 value={config.salaryAmount || 0}
                 onChange={(e) =>
                   setConfig((prev) => ({
@@ -226,7 +228,7 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
                 onValueChange={(value) =>
                   setConfig((prev) => ({
                     ...prev,
-                    salaryPeriod: value as 'monthly' | 'quarterly',
+                    salaryPeriod: value as SalaryPeriod,
                   }))
                 }
               >
@@ -239,6 +241,9 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
                   </SelectItem>
                   <SelectItem value="monthly">
                     {t('form.salaryPeriodMonthly')}
+                  </SelectItem>
+                  <SelectItem value="daily">
+                    {t('form.salaryPeriodDaily')}
                   </SelectItem>
                 </SelectContent>
               </Select>

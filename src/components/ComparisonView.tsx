@@ -50,7 +50,11 @@ export function ComparisonView({ calculations }: ComparisonViewProps) {
                         {key.replace('_', ' ')}
                       </span>
                       <span>
-                        {value !== undefined ? formatCurrency(value as number) : '—'}
+                        {value === undefined
+                          ? '—'
+                          : key === 'daysWorked'
+                            ? value
+                            : formatCurrency(value as number)}
                       </span>
                     </div>
                   );

@@ -96,6 +96,11 @@ export function PeopleTableCard({
                 <td className="py-2.5 pr-3">
                   <p className="font-medium">{p.name}</p>
                   <p className="text-xs text-muted-foreground">{describeRule(p, steps, t)}</p>
+                  {p.perDay && (
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {t('daysTimesRate', { days: p.perDay.days, rate: formatCurrency(p.perDay.rate) })}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground tabular-nums sm:hidden">
                     {t('salaryPlusBonus', {
                       salary: formatCurrency(p.quarterSalary),

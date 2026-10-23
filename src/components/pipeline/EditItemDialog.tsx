@@ -401,7 +401,9 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
                           <span className="text-[10px] text-muted-foreground ml-auto">
                             {w.formula_config.salaryPeriod === 'monthly'
                               ? `${w.formula_config.salaryAmount}/mo`
-                              : `${w.formula_config.salaryAmount}/qtr`}
+                              : w.formula_config.salaryPeriod === 'daily'
+                                ? `${w.formula_config.salaryAmount}/day`
+                                : `${w.formula_config.salaryAmount}/qtr`}
                           </span>
                         )}
                       </label>

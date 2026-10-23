@@ -1,3 +1,6 @@
+/** What a worker's salaryAmount means. Bonuses are per quarter. */
+export type SalaryPeriod = 'monthly' | 'quarterly' | 'daily';
+
 // Formula configuration stored in worker profile
 export interface FormulaConfig {
   baseMetric: 'revenue' | 'units_sold' | 'profit_margin';
@@ -7,8 +10,9 @@ export interface FormulaConfig {
   // is decided by the Pipeline tab, not by this field).
   salaryAmount?: number;
   // Period the entered salaryAmount represents. 'quarterly' = full quarter;
-  // 'monthly' = per-month amount that gets multiplied ×3 for the quarterly bonus calc.
-  salaryPeriod?: 'monthly' | 'quarterly';
+  // 'monthly' = per-month amount that gets multiplied ×3 for the quarterly bonus calc;
+  // 'daily' = pay per day, multiplied by the days worked in the quarter.
+  salaryPeriod?: SalaryPeriod;
   /**
    * @deprecated Salary deduction is now decided by the pipeline (presence of a
    * salary card), not this flag. Kept on the interface for backward compat with
@@ -31,6 +35,8 @@ export interface CalculationInputs {
   individualRevenue?: number;
   // Company revenue the quarter was calculated on
   companyRevenue?: number;
+  // Days worked in the quarter (workers paid per day)
+  daysWorked?: number;
 }
 
 // Global inputs for batch calculation (entered once, used for all workers)

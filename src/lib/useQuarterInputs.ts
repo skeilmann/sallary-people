@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import type { CalculationWithWorker, Worker } from './types';
 import {
+  isPaidPerDay,
   isSeller,
   resolveCompanyRevenue,
   seedFromSaved,
@@ -16,6 +17,8 @@ interface QuarterDraft {
   /** null = left empty on purpose (use the sellers' total). */
   companyRevenue?: number | null;
   sales?: Record<string, number>;
+  /** Days worked by people paid per day. */
+  days?: Record<string, number>;
   whatIf?: Record<string, WhatIfBonus>;
 }
 
@@ -109,6 +112,14 @@ export function useQuarterInputs(
     return out;
   }, [workers, draft, seed]);
 
+  const days = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const w of workers) {
+      if (isPaidPerDay(w)) out[w.id] = draft?.days?.[w.id] ?? seed.days[w.id] ?? 0;
+    }
+    return out;
+  }, [workers, draft, seed]);
+
   const typedCompanyRevenue: number | undefined =
     draft?.companyRevenue !== undefined
       ? draft.companyRevenue ?? undefined
@@ -135,6 +146,12 @@ export function useQuarterInputs(
     [updateDraft],
   );
 
+  const setDays = useCallback(
+    (workerId: string, value: number) =>
+      updateDraft((d) => ({ ...d, days: { ...d.days, [workerId]: value } })),
+    [updateDraft],
+  );
+
   /** Pass undefined to go back to "the sellers' total". */
   const setCompanyRevenue = useCallback(
     (value: number | undefined) =>
@@ -152,6 +169,8 @@ export function useQuarterInputs(
     latestSaved,
     sales,
     setSale,
+    days,
+    setDays,
     typedCompanyRevenue,
     companyRevenue,
     setCompanyRevenue,
