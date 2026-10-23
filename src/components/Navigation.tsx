@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
+import { LogOut } from 'lucide-react';
 import { TAB_ORDER, TAB_THEMES, type TabKey } from '@/lib/tab-themes';
 
 export function Navigation() {
@@ -27,34 +28,36 @@ export function Navigation() {
   return (
     <header className="border-b bg-background">
       <div className="container mx-auto px-6">
-        <div className="flex h-16 items-center justify-between gap-6">
+        {/* On phones the tabs get their own scrollable row under the title. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 md:h-16 md:flex-nowrap md:py-0">
           <Link
             href="/"
-            className="font-semibold text-lg tracking-tight whitespace-nowrap"
+            className="mr-auto font-semibold text-lg tracking-tight whitespace-nowrap"
           >
             {t('common.appName')}
           </Link>
 
+          {user && (
+            <nav className="order-last flex w-full items-center gap-0.5 overflow-x-auto pb-1 md:order-none md:w-auto md:overflow-visible md:pb-0">
+              {TAB_ORDER.map((key) => {
+                const theme = TAB_THEMES[key];
+                const isActive =
+                  key === 'dashboard'
+                    ? pathname === '/'
+                    : pathname.startsWith(theme.href);
+                return (
+                  <NavItem
+                    key={key}
+                    tabKey={key}
+                    label={t(`nav.${key}` as const)}
+                    isActive={isActive}
+                  />
+                );
+              })}
+            </nav>
+          )}
+
           <div className="flex items-center gap-4">
-            {user && (
-              <nav className="flex items-center gap-0.5">
-                {TAB_ORDER.map((key) => {
-                  const theme = TAB_THEMES[key];
-                  const isActive =
-                    key === 'dashboard'
-                      ? pathname === '/'
-                      : pathname.startsWith(theme.href);
-                  return (
-                    <NavItem
-                      key={key}
-                      tabKey={key}
-                      label={t(`nav.${key}` as const)}
-                      isActive={isActive}
-                    />
-                  );
-                })}
-              </nav>
-            )}
             <LanguageSwitcher />
             {user && (
               <>
@@ -64,8 +67,14 @@ export function Navigation() {
                 >
                   {user.email}
                 </span>
-                <Button variant="outline" size="sm" onClick={handleSignOut}>
-                  Sign out
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSignOut}
+                  aria-label={t('common.signOut')}
+                >
+                  <LogOut className="h-4 w-4 sm:hidden" aria-hidden="true" />
+                  <span className="hidden sm:inline">{t('common.signOut')}</span>
                 </Button>
               </>
             )}
@@ -99,7 +108,7 @@ function NavItem({
       style={style}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'group relative inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium',
+        'group relative inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium',
         'transition-colors duration-150',
         isActive
           ? 'text-[color:var(--nav-fg)] bg-[color:var(--nav-soft)]'

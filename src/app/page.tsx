@@ -1,36 +1,49 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { RequireAuth } from '@/components/RequireAuth';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { SavedBonusesSection } from '@/components/SavedBonusesSection';
 import { HistoricalComparisonCard } from '@/components/HistoricalComparisonCard';
 import { TabHeader } from '@/components/TabHeader';
+import { StepExplanationList } from '@/components/StepExplanation';
+import { PipelineWarnings } from '@/components/pipeline/PipelineWarnings';
+import { QuarterInputsCard } from '@/components/quarter/QuarterInputsCard';
+import { MoneyFlowCard } from '@/components/quarter/MoneyFlowCard';
+import { PeopleTableCard } from '@/components/quarter/PeopleTableCard';
+import { WhatIfCard } from '@/components/quarter/WhatIfCard';
 import type { Worker, Quarter, CalculationWithWorker } from '@/lib/types';
+import type { CalculationPipeline } from '@/lib/pipeline-types';
 import { getCurrentQuarter, getCurrentYear, generatePeriod } from '@/lib/types';
 import {
-  getWorkers,
+  createCalculation,
   getCalculation,
   getCalculationsByWorkerForPeriod,
+  getDefaultPipeline,
+  getWorkers,
 } from '@/lib/supabase';
-import { formatCurrency, getEffectiveSalary } from '@/lib/formulas';
+import { formatCurrency } from '@/lib/formulas';
+import { executePipeline } from '@/lib/pipeline-engine';
+import { validatePipeline } from '@/lib/pipeline-utils';
+import {
+  buildQuarterSaveRows,
+  buildWorkerInputs,
+  explainPipeline,
+  hasUnsavedChanges,
+  isSeller,
+  savedAdjustments,
+  sellersTotal,
+  summarizeMoneyFlow,
+  whatIfAmount,
+} from '@/lib/money-flow';
 import { usePersistedGlobalInputs, usePersistedPeriod } from '@/lib/usePersistedInputs';
+import { useQuarterInputs } from '@/lib/useQuarterInputs';
 
-const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 const years = Array.from({ length: 5 }, (_, i) => getCurrentYear() - 2 + i);
 
 function DashboardPageContent() {
@@ -42,25 +55,36 @@ function DashboardPageContent() {
   const router = useRouter();
 
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [pipeline, setPipeline] = useState<CalculationPipeline | null>(null);
   const [loading, setLoading] = useState(true);
   // Calcs for the currently selected period only, grouped by worker, newest first.
   const [calculationsByWorker, setCalculationsByWorker] = useState<
     Record<string, CalculationWithWorker[]>
   >({});
+  const [saving, setSaving] = useState(false);
+  const [saveFailure, setSaveFailure] = useState<{ period: string; count: number } | null>(null);
 
   // Persisted period selection (survives refresh, syncs across pages)
   const { quarter, year, setQuarter, setYear } = usePersistedPeriod(
     getCurrentQuarter(),
     getCurrentYear(),
   );
+  const currentPeriod = generatePeriod(quarter as Quarter, year);
+  const currentPeriodRef = useRef(currentPeriod);
+  useEffect(() => {
+    currentPeriodRef.current = currentPeriod;
+  }, [currentPeriod]);
 
-  // Persisted global inputs (survives refresh, syncs across pages)
+  // Tax rates are settings shared with the Pipeline page; they only matter
+  // when the pipeline has tax steps.
   const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
+
+  // This quarter's sales, company total and what-if bonuses.
+  const quarterInputs = useQuarterInputs(currentPeriod, workers, calculationsByWorker);
+  const { sales, companyRevenue, latestSaved, whatIf } = quarterInputs;
 
   // Historical calculations for comparison
   const [historicalCalculations, setHistoricalCalculations] = useState<CalculationWithWorker[]>([]);
-
-  const currentPeriod = generatePeriod(quarter as Quarter, year);
 
   // Check for compare parameter and load historical calculations
   useEffect(() => {
@@ -84,13 +108,20 @@ function DashboardPageContent() {
     }
   };
 
-  // One-time load: workers. Calculations are loaded by a separate effect that
-  // re-runs whenever the selected period changes.
+  // One-time load: workers and the bonus rules. Calculations are loaded by a
+  // separate effect that re-runs whenever the selected period changes.
   useEffect(() => {
     (async () => {
       try {
-        const workersData = await getWorkers();
+        const [workersData, pipelineData] = await Promise.all([
+          getWorkers(),
+          getDefaultPipeline().catch((error) => {
+            console.error('Failed to load pipeline:', error);
+            return null;
+          }),
+        ]);
         setWorkers(workersData);
+        setPipeline(pipelineData);
       } catch (error) {
         console.error('Failed to load data:', error);
       } finally {
@@ -118,40 +149,113 @@ function DashboardPageContent() {
     };
   }, [currentPeriod]);
 
-  // Historical total
-  const historicalTotal = historicalCalculations.reduce((sum, calc) => sum + calc.final_amount, 0);
+  // ==================== The quarter's calculation ====================
 
-  // Sum of bonuses already SAVED for the current period (one latest entry per worker).
-  const savedBonusesTotal = Object.values(calculationsByWorker).reduce(
-    (sum, calcs) => sum + (calcs[0]?.final_amount ?? 0),
-    0,
+  const engineGlobalInputs = useMemo(
+    () => ({
+      taxRate1: globalInputs.taxRate1,
+      taxRate2: globalInputs.taxRate2,
+      totalRevenue: companyRevenue,
+    }),
+    [globalInputs.taxRate1, globalInputs.taxRate2, companyRevenue],
+  );
+  const workerInputs = useMemo(() => buildWorkerInputs(workers, sales), [workers, sales]);
+
+  const result = useMemo(
+    () => pipeline && pipeline.rows.length > 0
+      ? executePipeline(pipeline, engineGlobalInputs, workers, workerInputs)
+      : null,
+    [pipeline, engineGlobalInputs, workers, workerInputs],
   );
 
-  // "Total Bonusuri" shown on the dashboard: only saved bonuses for this period
-  // (plus any historical-comparison entries the user opened).
-  const totalBonus = savedBonusesTotal + historicalTotal;
-
-  // Sum of every worker's salary — the company pays salaries whether or not
-  // the pipeline applies them to the bonus pool, so they always reduce
-  // finalRevenue. Monthly amounts are multiplied ×3 to match the quarter.
-  const totalSalariesDeducted = workers.reduce((sum, w) => {
-    const salary = w.formula_config.salaryAmount ?? 0;
-    if (salary <= 0) return sum;
-    return sum + getEffectiveSalary(w.formula_config, salary);
-  }, 0);
-
-  // Global taxes applied once to total revenue (avoids per-worker double-counting)
-  const totalTaxesFromRevenue =
-    (globalInputs.totalRevenue * (globalInputs.taxRate1 + globalInputs.taxRate2)) / 100;
-
-  // Final revenue: what the company keeps after taxes, salaries, and saved bonuses.
-  const finalRevenue = Math.max(
-    0,
-    globalInputs.totalRevenue
-      - totalTaxesFromRevenue
-      - totalSalariesDeducted
-      - savedBonusesTotal,
+  const steps = useMemo(
+    () => result && pipeline
+      ? explainPipeline(pipeline, result, workers, workerInputs, engineGlobalInputs)
+      : [],
+    [result, pipeline, workers, workerInputs, engineGlobalInputs],
   );
+
+  const issues = useMemo(() => {
+    if (!pipeline) return [];
+    const validation = validatePipeline(pipeline, workers);
+    return [...validation.errors, ...validation.warnings];
+  }, [pipeline, workers]);
+
+  // What-if bonuses only apply to people without a bonus rule. "Paid" ones
+  // count in this quarter's numbers; the rest are only a simulation.
+  const { allWhatIf, paidWhatIf } = useMemo(() => {
+    const all: Record<string, number> = {};
+    const paid: Record<string, number> = {};
+    if (result) {
+      for (const w of workers) {
+        if (result.workerBreakdowns[w.id]) continue;
+        const amount = whatIfAmount(whatIf[w.id], companyRevenue);
+        if (amount > 0) {
+          all[w.id] = amount;
+          if (whatIf[w.id]?.pay) paid[w.id] = amount;
+        }
+      }
+    }
+    return { allWhatIf: all, paidWhatIf: paid };
+  }, [result, workers, whatIf, companyRevenue]);
+
+  const adjustments = useMemo(() => savedAdjustments(latestSaved), [latestSaved]);
+
+  const flow = useMemo(
+    () => result ? summarizeMoneyFlow(result, workers, workerInputs, paidWhatIf, adjustments) : null,
+    [result, workers, workerInputs, paidWhatIf, adjustments],
+  );
+  const simulatedFlow = useMemo(
+    () => result ? summarizeMoneyFlow(result, workers, workerInputs, allWhatIf, adjustments) : null,
+    [result, workers, workerInputs, allWhatIf, adjustments],
+  );
+
+  const saveRows = useMemo(
+    () => flow ? buildQuarterSaveRows(flow, latestSaved) : [],
+    [flow, latestSaved],
+  );
+  const unsaved = hasUnsavedChanges(saveRows, latestSaved);
+  const lastSavedAt = Object.values(latestSaved).reduce<string | null>(
+    (latest, calc) => (calc && (!latest || calc.created_at > latest) ? calc.created_at : latest),
+    null,
+  );
+
+  const handleSaveQuarter = async () => {
+    if (saveRows.length === 0) return;
+    const period = currentPeriod;
+    setSaving(true);
+    setSaveFailure(null);
+    const workerMap = new Map(workers.map((w) => [w.id, w]));
+    const results = await Promise.allSettled(
+      saveRows.map((row) => {
+        const worker = workerMap.get(row.workerId);
+        const seller = worker ? isSeller(worker) : false;
+        return createCalculation({
+          worker_id: row.workerId,
+          period,
+          inputs: {
+            baseValue: seller ? sales[row.workerId] ?? 0 : companyRevenue,
+            salary: worker?.formula_config.salaryAmount ?? 0,
+            individualRevenue: seller ? sales[row.workerId] ?? 0 : undefined,
+            companyRevenue,
+          },
+          calculated_amount: row.calculatedAmount,
+          adjustment_amount: row.adjustmentAmount,
+          adjustment_note: row.adjustmentNote || null,
+          final_amount: row.finalAmount,
+        });
+      }),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    try {
+      const refreshed = await getCalculationsByWorkerForPeriod(period);
+      if (currentPeriodRef.current === period) setCalculationsByWorker(refreshed);
+    } catch (error) {
+      console.error('Failed to reload calculations after saving:', error);
+    }
+    setSaving(false);
+    setSaveFailure(failed > 0 ? { period, count: failed } : null);
+  };
 
   const handleRemoveHistorical = (calculationId: string) => {
     setHistoricalCalculations((prev) => prev.filter((c) => c.id !== calculationId));
@@ -187,6 +291,11 @@ function DashboardPageContent() {
     );
   }
 
+  const historicalTotal = historicalCalculations.reduce((sum, calc) => sum + calc.final_amount, 0);
+  const sellers = workers.filter(isSeller);
+  const hasRules = !!pipeline && pipeline.rows.length > 0;
+  const hasTaxSteps = !!pipeline?.rows.some((row) => row.items.some((item) => item.type === 'tax'));
+
   return (
     <>
       <TabHeader tab="dashboard" />
@@ -203,10 +312,10 @@ function DashboardPageContent() {
           </CardContent>
         </Card>
       ) : (
-        <>
+        <div className="space-y-8">
           {/* Historical Comparison Banner */}
           {historicalCalculations.length > 0 && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Badge variant="default" className="bg-blue-600">
@@ -223,130 +332,91 @@ function DashboardPageContent() {
             </div>
           )}
 
-          {/* Global Inputs Section */}
-          <Card className="mb-8" accent="dashboard">
-            <CardHeader>
-              <CardTitle>{t('globalInputs')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-6">
-                {/* Period Selection */}
-                <div className="space-y-2">
-                  <Label>{t('period')}</Label>
-                  <div className="flex gap-2">
-                    <Select value={quarter} onValueChange={(v) => setQuarter(v as Quarter)}>
-                      <SelectTrigger className="w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {quarters.map((q) => (
-                          <SelectItem key={q} value={q}>
-                            {q}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={year.toString()} onValueChange={(v) => setYear(parseInt(v))}>
-                      <SelectTrigger className="w-24">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {years.map((y) => (
-                          <SelectItem key={y} value={y.toString()}>
-                            {y}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+          {workers.length > 0 && (
+            <QuarterInputsCard
+              quarter={quarter as Quarter}
+              year={year}
+              years={years}
+              onQuarterChange={setQuarter}
+              onYearChange={setYear}
+              sellers={sellers}
+              sales={sales}
+              onSaleChange={quarterInputs.setSale}
+              typedCompanyRevenue={quarterInputs.typedCompanyRevenue}
+              sellersTotal={sellersTotal(workers, sales)}
+              onCompanyRevenueChange={quarterInputs.setCompanyRevenue}
+              showTaxRates={hasTaxSteps}
+              taxRate1={globalInputs.taxRate1}
+              taxRate2={globalInputs.taxRate2}
+              onTaxRateChange={(index, value) =>
+                setGlobalInputs((prev) => ({ ...prev, [index === 1 ? 'taxRate1' : 'taxRate2']: value }))
+              }
+            />
+          )}
 
-                {/* Total Revenue */}
-                <div className="space-y-2">
-                  <Label htmlFor="revenue">{t('totalRevenue')}</Label>
-                  <Input
-                    id="revenue"
-                    type="number"
-                    min="0"
-                    step="1000"
-                    value={globalInputs.totalRevenue || ''}
-                    onChange={(e) =>
-                      setGlobalInputs((prev) => ({
-                        ...prev,
-                        totalRevenue: parseFloat(e.target.value) || 0,
-                      }))
-                    }
-                    placeholder="0"
-                  />
-                </div>
+          {workers.length > 0 && !hasRules && (
+            <Card className="border-dashed">
+              <CardContent className="py-10 text-center">
+                <h3 className="text-lg font-semibold mb-2">{t('noPipelineTitle')}</h3>
+                <p className="text-muted-foreground mb-4">{t('noPipelineText')}</p>
+                <Link href="/pipeline">
+                  <Button>{t('openPipeline')}</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
 
-                {/* Tax Rate 1 */}
-                <div className="space-y-2">
-                  <Label htmlFor="tax1">{t('taxRate1')}</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="tax1"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={globalInputs.taxRate1 || ''}
-                      onChange={(e) =>
-                        setGlobalInputs((prev) => ({
-                          ...prev,
-                          taxRate1: parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                      placeholder="0"
-                    />
-                    <span className="text-muted-foreground">%</span>
-                  </div>
-                </div>
+          {hasRules && flow && companyRevenue <= 0 && (
+            <p className="rounded-lg border border-dashed px-4 py-8 text-center text-muted-foreground">
+              {t('typeSalesFirst')}
+            </p>
+          )}
 
-                {/* Tax Rate 2 */}
-                <div className="space-y-2">
-                  <Label htmlFor="tax2">{t('taxRate2')}</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="tax2"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={globalInputs.taxRate2 || ''}
-                      onChange={(e) =>
-                        setGlobalInputs((prev) => ({
-                          ...prev,
-                          taxRate2: parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                      placeholder="0"
-                    />
-                    <span className="text-muted-foreground">%</span>
-                  </div>
-                </div>
+          {hasRules && flow && companyRevenue > 0 && (
+            <>
+              <MoneyFlowCard flow={flow} />
 
-                {/* Total Preview */}
-                <div className="space-y-2">
-                  <Label>{t('totalBonuses')}</Label>
-                  <div className="text-2xl font-bold font-mono tabular-nums text-primary">
-                    {formatCurrency(totalBonus)}
-                  </div>
-                </div>
+              <div className="grid gap-8 lg:grid-cols-[3fr_2fr] lg:items-start">
+                <PeopleTableCard
+                  flow={flow}
+                  steps={steps}
+                  period={currentPeriod}
+                  saving={saving}
+                  saveFailedCount={saveFailure?.period === currentPeriod ? saveFailure.count : 0}
+                  unsaved={unsaved}
+                  lastSavedAt={lastSavedAt}
+                  canSave={saveRows.length > 0}
+                  onSave={handleSaveQuarter}
+                />
 
-                {/* Final Revenue (what company keeps after deductions) */}
-                <div className="space-y-2">
-                  <Label>{t('finalRevenue')}</Label>
-                  <div
-                    className="text-2xl font-bold font-mono tabular-nums"
-                    style={{ color: 'var(--tab-dashboard-strong)' }}
-                  >
-                    {formatCurrency(finalRevenue)}
-                  </div>
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t('howTitle')}</CardTitle>
+                    <CardDescription>{t('howSubtitle')}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <PipelineWarnings issues={issues} />
+                    <StepExplanationList steps={steps} />
+                    <Link
+                      href="/pipeline"
+                      className="inline-block text-sm text-primary underline underline-offset-2"
+                    >
+                      {t('howEdit')}
+                    </Link>
+                  </CardContent>
+                </Card>
               </div>
-            </CardContent>
-          </Card>
+
+              <WhatIfCard
+                people={flow.people.filter((p) => !p.hasRule)}
+                whatIf={whatIf}
+                onChange={quarterInputs.setWhatIf}
+                companyRevenue={companyRevenue}
+                companyKeepsNow={flow.companyKeeps}
+                companyKeepsWithAll={simulatedFlow?.companyKeeps ?? flow.companyKeeps}
+              />
+            </>
+          )}
 
           {/* Saved Bonuses for the selected period only */}
           {workers.length > 0 && (
@@ -357,60 +427,9 @@ function DashboardPageContent() {
             />
           )}
 
-          {/* Revenue Breakdown Card — visible when revenue entered */}
-          {globalInputs.totalRevenue > 0 && (
-            <Card className="mb-8" accent="dashboard">
-              <CardHeader>
-                <CardTitle>{t('revenueBreakdown')}</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {t('revenueBreakdownSubtitle')}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 max-w-md">
-                  <div className="flex justify-between text-sm">
-                    <span>{t('totalRevenue')}</span>
-                    <span className="font-mono tabular-nums">{formatCurrency(globalInputs.totalRevenue)}</span>
-                  </div>
-
-                  {totalTaxesFromRevenue > 0 && (
-                    <div className="flex justify-between text-sm text-red-600">
-                      <span>
-                        − {t('breakdownTaxes')} ({(globalInputs.taxRate1 + globalInputs.taxRate2).toFixed(1)}%)
-                      </span>
-                      <span className="font-mono tabular-nums">-{formatCurrency(totalTaxesFromRevenue)}</span>
-                    </div>
-                  )}
-
-                  {totalSalariesDeducted > 0 && (
-                    <div className="flex justify-between text-sm text-red-600">
-                      <span>− {t('breakdownSalaries')}</span>
-                      <span className="font-mono tabular-nums">-{formatCurrency(totalSalariesDeducted)}</span>
-                    </div>
-                  )}
-
-                  {savedBonusesTotal > 0 && (
-                    <div className="flex justify-between text-sm text-red-600">
-                      <span>− {t('breakdownBonuses')}</span>
-                      <span className="font-mono tabular-nums">-{formatCurrency(savedBonusesTotal)}</span>
-                    </div>
-                  )}
-
-                  <div
-                    className="flex justify-between text-base font-bold border-t pt-2"
-                    style={{ color: 'var(--tab-dashboard-fg)' }}
-                  >
-                    <span>{t('finalRevenue')}</span>
-                    <span className="font-mono tabular-nums">{formatCurrency(finalRevenue)}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Historical Calculations Section */}
           {historicalCalculations.length > 0 && (
-            <>
+            <div>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold">{tHistory('historicalCalculations')}</h2>
                 <Badge variant="outline" className="bg-blue-50">
@@ -418,7 +437,7 @@ function DashboardPageContent() {
                 </Badge>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {historicalCalculations.map((calc) => (
                   <HistoricalComparisonCard
                     key={calc.id}
@@ -427,11 +446,11 @@ function DashboardPageContent() {
                   />
                 ))}
               </div>
-            </>
+            </div>
           )}
 
           {/* Quick Links */}
-          <div className="mt-8 flex gap-4">
+          <div className="flex gap-4">
             <Link href="/workers">
               <Button variant="outline">{t('manageWorkers')}</Button>
             </Link>
@@ -439,7 +458,7 @@ function DashboardPageContent() {
               <Button variant="outline">{t('viewHistory')}</Button>
             </Link>
           </div>
-        </>
+        </div>
       )}
       </div>
     </>

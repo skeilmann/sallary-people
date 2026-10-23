@@ -21,9 +21,10 @@ export function LanguageSwitcher() {
 
   return (
     <Select value={currentLocale} onValueChange={handleChange}>
-      <SelectTrigger className="w-[140px] h-8">
+      <SelectTrigger className="w-auto sm:w-[140px] h-8" aria-label={localeNames[currentLocale]}>
         <SelectValue>
-          {localeFlags[currentLocale]} {localeNames[currentLocale]}
+          {localeFlags[currentLocale]}
+          <span className="hidden sm:inline"> {localeNames[currentLocale]}</span>
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
