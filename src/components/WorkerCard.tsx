@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Worker } from '@/lib/types';
-import { describeFormulaTranslated } from '@/lib/formulas';
+import { CURRENCY, describeFormulaTranslated } from '@/lib/formulas';
 
 interface WorkerCardProps {
   worker: Worker;
@@ -44,7 +44,7 @@ export function WorkerCard({ worker, onEdit, onDelete, onCalculate }: WorkerCard
             </Badge>
             {config.salaryAmount ? (
               <Badge variant="outline" className="text-blue-600 border-blue-300 hidden lg:inline-flex">
-                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(config.salaryAmount)}
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 }).format(config.salaryAmount)}
               </Badge>
             ) : null}
           </div>

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowDown, DollarSign, TrendingDown, User, Users } from 'lucide-react';
+import { ArrowDown, Euro, TrendingDown, User, Users } from 'lucide-react';
 import type { PipelineExecutionResult } from '@/lib/pipeline-types';
 import { formatCurrency } from '@/lib/formulas';
 
@@ -37,7 +37,7 @@ export function PipelinePreview({ result }: PipelinePreviewProps) {
         {/* Starting revenue */}
         <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-200">
           <div className="flex items-center gap-2">
-            <DollarSign className="w-4 h-4 text-green-600" />
+            <Euro className="w-4 h-4 text-green-600" />
             <span className="text-xs font-medium text-green-800">{t('revenue')}</span>
           </div>
           <span className="text-sm font-mono font-bold text-green-800">

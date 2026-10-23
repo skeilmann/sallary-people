@@ -23,6 +23,15 @@ export interface PipelineItem {
   /** For 'salary' and 'worker_commission' items: the worker this belongs to */
   workerId?: string;
 
+  /** For 'worker_commission' items of company-revenue workers: what the rate
+   *  is applied to.
+   *  - 'running_total' (default): the pipeline's running total at this card's
+   *    step, so anything placed above (taxes, expenses, other bonuses)
+   *    reduces it.
+   *  - 'company_revenue': total company revenue, wherever the card sits.
+   *  Individual-revenue workers ignore this and always use their own sales. */
+  commissionBase?: 'running_total' | 'company_revenue';
+
   /** For 'custom_deduction' items: user-defined label */
   label?: string;
 
@@ -99,23 +108,15 @@ export interface PipelineItemResult {
   workerId?: string;
   /**
    * For 'salary' items: when the card sits after the worker's commission
-   * card AND salary < that prior bonus, the engine nets the salary against
-   * the bonus. This field is the salary amount that was netted out (also
-   * equal to deductedAmount being 0 in that case — the company has already
-   * paid the cash via the bonus row).
+   * card, the salary is an advance on that bonus. This field is the part of
+   * the salary taken out of the bonus (at most the whole bonus). Any salary
+   * above the bonus is still paid by the company and shows up in
+   * deductedAmount.
    * For 'worker_commission' items: when a later salary netted against this
    * bonus, this is the amount netted out. Gross = commissionAmount,
    * Net = commissionAmount - nettedSalary.
    */
   nettedSalary?: number;
-  /**
-   * For 'salary' items that did NOT meet the auto-netting condition
-   * (no prior bonus, or salary >= prior bonus): the salary amount that was
-   * instead credited to the worker's total payout. The company still pays it
-   * via `deductedAmount`, but the worker's recorded commission grows by this
-   * amount so the dashboard reflects bonus + salary.
-   */
-  addedSalary?: number;
 
   /** For 'shared_pool_commission' items: the value that poolRate was applied
    *  to. Equals `inputAmount` when baseSource is 'pipeline' (or unset), and
@@ -155,8 +156,9 @@ export interface PipelineExecutionResult {
   rowResults: PipelineRowResult[];
   finalRunningTotal: number;
   /**
-   * workerId → total worker payout (commission, net of any auto-netted salary,
-   * plus any non-netted salary added on top).
+   * workerId → bonus for the period (commission and shared-pool shares, net
+   * of any salary netted against them). Salaries are never included: they
+   * are paid separately.
    */
   workerCommissions: Record<string, number>;
   /** workerId → breakdown of how commission was computed */
@@ -166,8 +168,6 @@ export interface PipelineExecutionResult {
     baseCommission: number;
     /** Salary amount that was netted against this worker's bonus, if any */
     nettedSalary?: number;
-    /** Salary amount that was added on top of this worker's bonus, if any */
-    addedSalary?: number;
     totalCommission: number;
   }>;
 }

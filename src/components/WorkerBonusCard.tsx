@@ -33,6 +33,8 @@ import {
   getEffectiveSalary,
   calculateFinalAmount,
 } from '@/lib/formulas';
+import type { ExplainedStep } from '@/lib/money-flow';
+import { StepExplanationList } from '@/components/StepExplanation';
 
 interface WorkerBonusCardProps {
   worker: Worker;
@@ -51,6 +53,9 @@ interface WorkerBonusCardProps {
    * the breakdown line — replaces the legacy `config.deductSalary` check.
    */
   pipelineSalaryDeducted?: number;
+  /** The pipeline steps that decide this worker's bonus, explained in the
+   *  bonus window. */
+  pipelineSteps?: ExplainedStep[];
   /**
    * Latest saved calculation for the currently selected period, used to
    * pre-fill the editing modal (salary, adjustment slider, note). When null
@@ -92,6 +97,7 @@ export function WorkerBonusCard({
   pipelineCommissionAmount,
   pipelineBaseAmount,
   pipelineSalaryDeducted,
+  pipelineSteps,
   savedSnapshot,
   showSelectionCheckbox,
   isSelected,
@@ -380,7 +386,16 @@ export function WorkerBonusCard({
           <div className="space-y-4 py-4">
             {/* Calculation Breakdown */}
             <div className="bg-muted p-4 rounded-lg space-y-2">
-              {isPipelineMode ? (
+              {isPipelineMode && pipelineSteps && pipelineSteps.length > 0 ? (
+                <>
+                  {/* Pipeline mode: the steps that decide this bonus */}
+                  <StepExplanationList steps={pipelineSteps} />
+                  <div className="flex justify-between text-sm font-medium border-t pt-2">
+                    <span>{t('bonusForQuarter')}</span>
+                    <span className="font-bold">{formatCurrency(calculatedAmount)}</span>
+                  </div>
+                </>
+              ) : isPipelineMode ? (
                 <>
                   {/* Pipeline mode: simplified breakdown showing base amount and result */}
                   <div className="flex justify-between text-sm">

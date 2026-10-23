@@ -18,6 +18,10 @@ import { getEffectiveSalary } from './formulas';
  *    the commission amount paid out
  * 4. After all items in a row are processed, the running total is reduced
  *    by the sum of all deductions in that row
+ *
+ * Salary cards never add to a worker's bonus. Placed below the worker's
+ * bonus, the salary is an advance on it (bonus = max(0, bonus - salary));
+ * placed anywhere else it is a plain company cost.
  */
 export function executePipeline(
   pipeline: CalculationPipeline,
@@ -32,7 +36,6 @@ export function executePipeline(
     commissionRate: number;
     baseCommission: number;
     nettedSalary?: number;
-    addedSalary?: number;
     totalCommission: number;
   }> = {};
   // Initialize all workers with 0 commission
@@ -72,12 +75,11 @@ export function executePipeline(
 
     for (const item of row.items) {
       // Salary items sitting in a row AFTER the matching worker's commission
-      // card, and whose amount is strictly less than that prior bonus, are
-      // automatically netted against the bonus payout: the company already
-      // paid the cash via the bonus, so the salary card becomes 0-impact on
-      // the company running total and instead reduces the worker's recorded
-      // commission. When conditions aren't met, the salary falls through to
-      // normal deduction handling.
+      // card are an advance on that bonus: the bonus already paid out covers
+      // the salary, so the salary is taken out of the bonus (never below 0).
+      // Only the part of the salary the bonus can't cover is a new company
+      // cost. Without a prior bonus the salary falls through to normal
+      // deduction handling.
       if (item.type === 'salary' && item.workerId) {
         const worker = workerMap.get(item.workerId);
         const rawSalary = workerInputs[item.workerId]?.salary
@@ -86,16 +88,23 @@ export function executePipeline(
         const salaryAmount = worker
           ? getEffectiveSalary(worker.formula_config, rawSalary)
           : rawSalary;
-        const priorBonus = priorCommissions[item.workerId] ?? 0;
+        // Same-row commission cards don't count, and an earlier salary card
+        // in this row may already have used part of the bonus.
+        const availableBonus = Math.min(
+          priorCommissions[item.workerId] ?? 0,
+          workerCommissions[item.workerId] ?? 0,
+        );
 
-        if (priorBonus > 0 && salaryAmount < priorBonus) {
+        if (availableBonus > 0) {
           const workerName = worker?.name ?? 'Unknown';
-          const newTotal = Math.round((priorBonus - salaryAmount) * 100) / 100;
+          const netted = Math.round(Math.min(salaryAmount, availableBonus) * 100) / 100;
+          const uncovered = Math.round((salaryAmount - netted) * 100) / 100;
+          const newTotal = Math.round(((workerCommissions[item.workerId] ?? 0) - netted) * 100) / 100;
           workerCommissions[item.workerId] = newTotal;
           const existingBreakdown = workerBreakdowns[item.workerId];
           if (existingBreakdown) {
             existingBreakdown.nettedSalary =
-              (existingBreakdown.nettedSalary ?? 0) + salaryAmount;
+              (existingBreakdown.nettedSalary ?? 0) + netted;
             existingBreakdown.totalCommission = newTotal;
           }
           // Annotate the MOST RECENT prior commission item for this worker
@@ -114,18 +123,19 @@ export function executePipeline(
           }
           if (mostRecentCommission) {
             mostRecentCommission.nettedSalary =
-              (mostRecentCommission.nettedSalary ?? 0) + salaryAmount;
+              (mostRecentCommission.nettedSalary ?? 0) + netted;
           }
           itemResults.push({
             itemId: item.id,
             type: 'salary',
             label: `${workerName} Salary`,
             inputAmount: runningTotalBefore,
-            deductedAmount: 0,
+            deductedAmount: uncovered,
             workerName,
             workerId: item.workerId,
-            nettedSalary: salaryAmount,
+            nettedSalary: netted,
           });
+          totalDeductions += uncovered;
           nettedSalaryItemIds.add(item.id);
           continue;
         }
@@ -150,19 +160,16 @@ export function executePipeline(
 
           // Store breakdown — use result.inputAmount which is the actual base
           // (per-worker individual base for individual-source workers, pipeline
-          // running total otherwise). Preserve any addedSalary already
-          // accumulated from a salary card that ran earlier in this pipeline.
+          // running total or company revenue otherwise).
           const worker = result.workerId ? workerMap.get(result.workerId) : undefined;
           if (worker) {
             const config = worker.formula_config;
             const actualBase = result.inputAmount;
             const baseCommission = actualBase * (config.commissionRate / 100);
-            const priorAddedSalary = workerBreakdowns[result.workerId]?.addedSalary ?? 0;
             workerBreakdowns[result.workerId] = {
               baseAmount: actualBase,
               commissionRate: config.commissionRate,
               baseCommission: Math.round(baseCommission * 100) / 100,
-              addedSalary: priorAddedSalary > 0 ? priorAddedSalary : undefined,
               totalCommission: workerCommissions[result.workerId],
             };
           }
@@ -184,33 +191,17 @@ export function executePipeline(
           // Store a minimal breakdown so the dashboard can display the share.
           // The rate stored is the pool rate, which is the rate the user
           // actually configured — not the per-worker formula_config rate.
-          const priorAddedSalary = workerBreakdowns[pid]?.addedSalary ?? 0;
           workerBreakdowns[pid] = {
             baseAmount: breakdownBase,
             commissionRate: item.poolRate ?? 0,
             baseCommission: Math.round(perPerson * 100) / 100,
-            addedSalary: priorAddedSalary > 0 ? priorAddedSalary : undefined,
             totalCommission: workerCommissions[pid],
           };
         }
         totalDeductions += result.deductedAmount;
-      } else if (item.type === 'salary' && item.workerId) {
-        // Salary card that did NOT auto-net (otherwise the `continue` above
-        // would have skipped this branch). Credit the salary to the worker's
-        // recorded payout so their total = bonus + salary. Company still pays
-        // it: `result.deductedAmount` continues to flow into `totalDeductions`.
-        const added = Math.round(result.deductedAmount * 100) / 100;
-        workerCommissions[item.workerId] = Math.round(
-          ((workerCommissions[item.workerId] ?? 0) + added) * 100
-        ) / 100;
-        const existing = workerBreakdowns[item.workerId];
-        if (existing) {
-          existing.addedSalary = (existing.addedSalary ?? 0) + added;
-          existing.totalCommission = workerCommissions[item.workerId];
-        }
-        result.addedSalary = added;
-        totalDeductions += result.deductedAmount;
       } else {
+        // Taxes, expenses, and salary cards with no bonus above them: a
+        // plain company cost. A salary card never adds to the worker's bonus.
         totalDeductions += result.deductedAmount;
       }
     }
@@ -343,18 +334,25 @@ function executeItem(
       const workerName = worker.name;
 
       // Determine the base amount for commission. Position drives the value
-      // in both modes — the only difference is which "running total" we read.
+      // unless the card is set to use all company revenue.
       //
       // 'global': company pipeline running total at this card's row. Cards
-      //   above (Tax, Salary, Expense) already reduced it.
+      //   above (Tax, Salary, Expense) already reduced it. With
+      //   commissionBase 'company_revenue' the card ignores its position and
+      //   always uses total company revenue.
       // 'individual': per-worker running base starting from individualRevenue,
       //   reduced by this worker's Salary card and Tax cards in earlier rows.
       //   Items in the same row see the pre-row snapshot, matching the
       //   existing "same row = same base" semantics.
       const isIndividual = config.revenueSource === 'individual';
-      let baseAmount = isIndividual
-        ? (individualBasesBefore[worker.id] ?? 0)
-        : runningTotal;
+      let baseAmount: number;
+      if (isIndividual) {
+        baseAmount = individualBasesBefore[worker.id] ?? 0;
+      } else if (item.commissionBase === 'company_revenue') {
+        baseAmount = globalInputs.totalRevenue;
+      } else {
+        baseAmount = runningTotal;
+      }
 
       baseAmount = Math.max(0, baseAmount);
 

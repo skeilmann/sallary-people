@@ -151,12 +151,15 @@ export function getFieldLabel(field: string, config: FormulaConfig): string {
  */
 function getBaseMetricLabel(metric: FormulaConfig['baseMetric']): string {
   const labels: Record<typeof metric, string> = {
-    revenue: 'Revenue ($)',
+    revenue: 'Revenue (€)',
     units_sold: 'Units Sold',
-    profit_margin: 'Profit Margin ($)',
+    profit_margin: 'Profit Margin (€)',
   };
   return labels[metric];
 }
+
+/** Currency of every amount in the app. */
+export const CURRENCY = 'EUR';
 
 /**
  * Format currency for display
@@ -164,7 +167,17 @@ function getBaseMetricLabel(metric: FormulaConfig['baseMetric']): string {
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: CURRENCY,
+  }).format(amount);
+}
+
+/** Whole euros, for headline numbers where cents only add noise. */
+export function formatCurrencyWhole(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: CURRENCY,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(amount);
 }
 

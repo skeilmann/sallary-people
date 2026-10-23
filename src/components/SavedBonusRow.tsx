@@ -45,11 +45,8 @@ export function SavedBonusRow({ worker, calculations, onView }: SavedBonusRowPro
       ? t('personalRevenueLine', { amount: formatCurrency(inputs.individualRevenue ?? 0) })
       : t('companyRevenueLine', { amount: formatCurrency(inputs.baseValue ?? 0) });
 
-    const salaryLine =
-      inputs.salary !== undefined && inputs.salary > 0
-        ? ` ${t('minusSalary', { amount: formatCurrency(inputs.salary) })}`
-        : '';
-
+    // The salary stored with a record is the worker's salary setting, not
+    // proof that it was deducted, so it is not shown as a deduction here.
     const adj = calc.adjustment_amount;
     let adjustmentLine = '';
     if (adj > 0) {
@@ -58,7 +55,7 @@ export function SavedBonusRow({ worker, calculations, onView }: SavedBonusRowPro
       adjustmentLine = ` ${t('minusAdjustment', { amount: formatCurrency(Math.abs(adj)) })}`;
     }
 
-    return `${baseValueLine}${salaryLine}${adjustmentLine}`;
+    return `${baseValueLine}${adjustmentLine}`;
   };
 
   return (

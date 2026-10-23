@@ -29,6 +29,8 @@ export interface CalculationInputs {
   salary?: number;
   // Individual revenue (when worker uses 'individual' revenue source)
   individualRevenue?: number;
+  // Company revenue the quarter was calculated on
+  companyRevenue?: number;
 }
 
 // Global inputs for batch calculation (entered once, used for all workers)

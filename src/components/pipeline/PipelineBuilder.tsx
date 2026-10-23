@@ -58,13 +58,19 @@ import {
   findItemRow,
   generatePipelineId,
   generateDefaultPipeline,
+  validatePipeline,
 } from '@/lib/pipeline-utils';
 import { executePipeline } from '@/lib/pipeline-engine';
 import { formatCurrency } from '@/lib/formulas';
 import {
-  usePersistedGlobalInputs,
-  usePersistedIndividualRevenues,
-} from '@/lib/usePersistedInputs';
+  buildWorkerInputs,
+  explainPipeline,
+  sellersTotal,
+  stepInvolvesWorker,
+} from '@/lib/money-flow';
+import { usePersistedGlobalInputs } from '@/lib/usePersistedInputs';
+import { useQuarterInputs } from '@/lib/useQuarterInputs';
+import { PipelineWarnings } from './PipelineWarnings';
 
 const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 
@@ -190,36 +196,23 @@ export function PipelineBuilder({
     return () => clearTimeout(id);
   }, [autoSaveStatus]);
 
-  // Persisted global inputs (shared with Dashboard, survives refresh)
+  // Tax rates are settings shared with the Dashboard (survive refresh).
   const { globalInputs, setGlobalInputs } = usePersistedGlobalInputs();
 
-  // Persisted individual revenues (shared with Dashboard, survives refresh)
-  const { individualRevenues, setIndividualRevenues } = usePersistedIndividualRevenues();
-
-  // Dashboard-local override: when a saved calc exists for the selected quarter,
-  // its individual revenue is seeded here. Survives within this surface only.
-  const [quarterIndividualRevenue, setQuarterIndividualRevenue] = useState<
-    Record<string, number>
-  >({});
+  // Sales and company total for the selected quarter, shared with the
+  // Dashboard. A saved quarter shows its saved numbers until edited.
+  const quarterInputs = useQuarterInputs(period, workers, calculationsByWorker);
+  const { sales, setSale, typedCompanyRevenue, companyRevenue, setCompanyRevenue } = quarterInputs;
+  const engineGlobalInputs = useMemo(
+    () => ({ ...globalInputs, totalRevenue: companyRevenue }),
+    [globalInputs, companyRevenue],
+  );
 
   // Bulk save state — mirrors Dashboard.
   const [selectedForBulkSave, setSelectedForBulkSave] = useState<Set<string>>(new Set());
   const [bulkSaveOpen, setBulkSaveOpen] = useState(false);
 
-  // Seed individual-revenue overrides from saved values whenever the period's
-  // saved data changes (load or after save).
-  useEffect(() => {
-    const seed: Record<string, number> = {};
-    for (const [workerId, calcs] of Object.entries(calculationsByWorker)) {
-      const latest = calcs[0];
-      const v = latest?.inputs.individualRevenue;
-      if (v !== undefined && v !== null) seed[workerId] = v;
-    }
-    setQuarterIndividualRevenue(seed);
-  }, [calculationsByWorker]);
-
-  const readIndividualRevenue = (workerId: string): number =>
-    quarterIndividualRevenue[workerId] ?? individualRevenues[workerId] ?? 0;
+  const readIndividualRevenue = (workerId: string): number => sales[workerId] ?? 0;
 
   // DnD state
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -233,45 +226,44 @@ export function PipelineBuilder({
     })
   );
 
-  // Build worker inputs for execution (uses period-aware revenue reader)
-  const workerInputs = useMemo(() => {
-    const inputs: Record<string, { salary?: number; individualRevenue?: number }> = {};
-    for (const w of workers) {
-      inputs[w.id] = {
-        salary: w.formula_config.salaryAmount,
-        individualRevenue:
-          w.formula_config.revenueSource === 'individual'
-            ? readIndividualRevenue(w.id)
-            : undefined,
-      };
-    }
-    return inputs;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workers, individualRevenues, quarterIndividualRevenue]);
+  // Build worker inputs for execution from this quarter's sales
+  const workerInputs = useMemo(() => buildWorkerInputs(workers, sales), [workers, sales]);
+
+  const pipelineForExec: CalculationPipeline = useMemo(() => ({
+    id: pipeline?.id ?? '',
+    name: pipelineName,
+    rows,
+    created_at: '',
+    updated_at: '',
+  }), [pipeline?.id, pipelineName, rows]);
 
   // Live calculation result
   const executionResult: PipelineExecutionResult | null = useMemo(() => {
     if (rows.length === 0) return null;
     try {
-      const pipelineForExec: CalculationPipeline = {
-        id: pipeline?.id ?? '',
-        name: pipelineName,
-        rows,
-        created_at: '',
-        updated_at: '',
-      };
-      return executePipeline(pipelineForExec, globalInputs, workers, workerInputs);
+      return executePipeline(pipelineForExec, engineGlobalInputs, workers, workerInputs);
     } catch {
       return null;
     }
-  }, [rows, globalInputs, workers, workerInputs, pipeline?.id, pipelineName]);
+  }, [rows.length, pipelineForExec, engineGlobalInputs, workers, workerInputs]);
+
+  // Plain-language steps, used for the bonus window of each worker.
+  const explainedSteps = useMemo(
+    () => executionResult
+      ? explainPipeline(pipelineForExec, executionResult, workers, workerInputs, engineGlobalInputs)
+      : [],
+    [executionResult, pipelineForExec, workers, workerInputs, engineGlobalInputs],
+  );
+
+  const validation = useMemo(
+    () => validatePipeline({ name: pipelineName, rows }, workers),
+    [pipelineName, rows, workers],
+  );
 
   // Per-worker salary that was netted against the worker's bonus by the
-  // pipeline. Only the auto-netted portion counts here — when a salary card
-  // does NOT meet the netting condition, the engine instead credits the
-  // salary to the worker's payout (workerCommissions), so it is not a
-  // deduction from the worker's perspective and must be excluded from this
-  // memo. Used by WorkerBonusCard to render the "- salary" formula label.
+  // pipeline (a salary card placed below the worker's bonus). Salary cards
+  // elsewhere are a company cost and never change the bonus, so they are
+  // excluded. Used by WorkerBonusCard to render the "- salary" formula label.
   const pipelineSalaryByWorker = useMemo<Record<string, number>>(() => {
     const out: Record<string, number> = {};
     if (!executionResult) return out;
@@ -487,7 +479,7 @@ export function PipelineBuilder({
   const eligibleWorkerIds = workers
     .filter((w) => {
       const hasRevenue =
-        w.formula_config.revenueSource === 'individual' || globalInputs.totalRevenue > 0;
+        w.formula_config.revenueSource === 'individual' || companyRevenue > 0;
       if (!hasRevenue) return false;
       if (executionResult && !executionResult.workerBreakdowns[w.id]) return false;
       return true;
@@ -497,13 +489,7 @@ export function PipelineBuilder({
     eligibleWorkerIds.length > 0 &&
     eligibleWorkerIds.every((id) => selectedForBulkSave.has(id));
 
-  // Snapshot of individual revenues used by the bulk save modal.
-  const bulkIndividualRevenues = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const w of workers) m[w.id] = readIndividualRevenue(w.id);
-    return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workers, individualRevenues, quarterIndividualRevenue]);
+  const autoCompanyRevenue = sellersTotal(workers, sales);
 
   return (
     <div className="space-y-6">
@@ -566,15 +552,15 @@ export function PipelineBuilder({
                     type="number"
                     min="0"
                     step="1000"
-                    value={globalInputs.totalRevenue || ''}
-                    onChange={(e) =>
-                      setGlobalInputs((prev) => ({
-                        ...prev,
-                        totalRevenue: parseFloat(e.target.value) || 0,
-                      }))
-                    }
-                    placeholder="0"
+                    value={typedCompanyRevenue || ''}
+                    onChange={(e) => setCompanyRevenue(parseFloat(e.target.value) || undefined)}
+                    placeholder={autoCompanyRevenue > 0 ? String(autoCompanyRevenue) : '0'}
                   />
+                  {!typedCompanyRevenue && autoCompanyRevenue > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {tDashboard('companySalesAuto', { amount: formatCurrency(autoCompanyRevenue) })}
+                    </p>
+                  )}
                 </div>
 
                 {/* Tax Rate 1 */}
@@ -639,11 +625,7 @@ export function PipelineBuilder({
                             min="0"
                             step="1000"
                             value={readIndividualRevenue(w.id) || ''}
-                            onChange={(e) => {
-                              const v = parseFloat(e.target.value) || 0;
-                              setIndividualRevenues(prev => ({ ...prev, [w.id]: v }));
-                              setQuarterIndividualRevenue(prev => ({ ...prev, [w.id]: v }));
-                            }}
+                            onChange={(e) => setSale(w.id, parseFloat(e.target.value) || 0)}
                             placeholder="0"
                             className="h-7 text-xs"
                           />
@@ -656,11 +638,11 @@ export function PipelineBuilder({
           </Card>
 
           {/* Revenue / Final Total ribbon */}
-          {globalInputs.totalRevenue > 0 && (
+          {companyRevenue > 0 && (
             <div className="flex items-center gap-3 px-4 py-3 bg-green-50 border-2 border-green-200 rounded-xl">
               <span className="text-sm font-medium text-green-800">{t('revenue')}</span>
               <span className="text-lg font-mono font-bold text-green-800">
-                {formatCurrency(globalInputs.totalRevenue)}
+                {formatCurrency(companyRevenue)}
               </span>
               {executionResult && (
                 <div className="ml-auto flex items-center gap-2 pl-3 border-l border-green-300">
@@ -672,6 +654,8 @@ export function PipelineBuilder({
               )}
             </div>
           )}
+
+          <PipelineWarnings issues={[...validation.errors, ...validation.warnings]} />
 
           {/* DnD Context wraps pipeline rows */}
           <DndContext
@@ -833,7 +817,7 @@ export function PipelineBuilder({
             {workers.map((worker) => {
               const isIndividual = worker.formula_config.revenueSource === 'individual';
               // Empty-state placeholder when global revenue is required but missing
-              if (!isIndividual && globalInputs.totalRevenue === 0) {
+              if (!isIndividual && companyRevenue === 0) {
                 return (
                   <Card key={worker.id} className="border-dashed opacity-60">
                     <CardHeader className="pb-2">
@@ -887,15 +871,13 @@ export function PipelineBuilder({
                   )}
                   <WorkerBonusCard
                     worker={worker}
-                    globalInputs={globalInputs}
+                    globalInputs={engineGlobalInputs}
                     individualRevenue={readIndividualRevenue(worker.id)}
-                    onIndividualRevenueChange={(value) => {
-                      setIndividualRevenues((prev) => ({ ...prev, [worker.id]: value }));
-                      setQuarterIndividualRevenue((prev) => ({ ...prev, [worker.id]: value }));
-                    }}
+                    onIndividualRevenueChange={(value) => setSale(worker.id, value)}
                     pipelineCommissionAmount={pipelineCommission}
                     pipelineBaseAmount={pipelineBreakdown?.baseAmount}
                     pipelineSalaryDeducted={pipelineSalaryByWorker[worker.id]}
+                    pipelineSteps={explainedSteps.filter((s) => stepInvolvesWorker(s, worker.id))}
                     savedSnapshot={savedSnapshot}
                     showSelectionCheckbox={!!executionResult}
                     isSelected={selectedForBulkSave.has(worker.id)}
@@ -924,7 +906,7 @@ export function PipelineBuilder({
           onClose={() => setBulkSaveOpen(false)}
           workers={workers.filter((w) => selectedForBulkSave.has(w.id))}
           pipelineResult={executionResult}
-          individualRevenues={bulkIndividualRevenues}
+          individualRevenues={sales}
           period={period}
           onConfirm={handleBulkSaveConfirm}
         />

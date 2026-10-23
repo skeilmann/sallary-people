@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { useTranslations } from 'next-intl';
-import { GripVertical, Percent, DollarSign, User, Users, Receipt, Plus } from 'lucide-react';
+import { GripVertical, Percent, Euro, User, Users, Receipt, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -142,7 +142,7 @@ export function ItemPalette({ rows, workers, onAddItem }: ItemPaletteProps) {
                   item={{ id: `palette-salary-${workerId}`, type: 'salary', workerId }}
                   label={t('salary', { name: workerName })}
                   placed={placed}
-                  icon={<DollarSign className="w-3.5 h-3.5" />}
+                  icon={<Euro className="w-3.5 h-3.5" />}
                   colorClass="bg-orange-50 border-orange-200 text-orange-800"
                   onAddItem={handlePaletteAdd}
                 />

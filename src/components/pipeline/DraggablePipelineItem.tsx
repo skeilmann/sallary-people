@@ -3,7 +3,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslations } from 'next-intl';
-import { X, Pencil, GripVertical, Percent, DollarSign, User, Users, Receipt } from 'lucide-react';
+import { X, Pencil, GripVertical, Percent, Euro, User, Users, Receipt } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { PipelineItem, PipelineItemResult } from '@/lib/pipeline-types';
 import { formatCurrency } from '@/lib/formulas';
@@ -29,7 +29,7 @@ const typeColors: Record<string, string> = {
 
 const typeIcons: Record<string, React.ReactNode> = {
   tax: <Percent className="w-3.5 h-3.5" />,
-  salary: <DollarSign className="w-3.5 h-3.5" />,
+  salary: <Euro className="w-3.5 h-3.5" />,
   worker_commission: <User className="w-3.5 h-3.5" />,
   shared_pool_commission: <Users className="w-3.5 h-3.5" />,
   custom_deduction: <Receipt className="w-3.5 h-3.5" />,
@@ -101,15 +101,12 @@ export function DraggablePipelineItem({
       return `${formatCurrency(result.perPerson)} ${t('each')}`;
     }
     if (item.type === 'salary' && result.nettedSalary !== undefined) {
-      // Salary was netted against a prior bonus — the company didn't spend
-      // additional cash, the worker's payout is reduced instead.
-      return `-${formatCurrency(result.nettedSalary)}`;
-    }
-    if (item.type === 'salary' && result.addedSalary !== undefined) {
-      // Salary did NOT meet the netting condition — it's added to the
-      // worker's total payout. The company still pays it, but from the
-      // worker's perspective this card increases their take-home.
-      return `+${formatCurrency(result.addedSalary)}`;
+      // Salary was netted against a prior bonus — the worker's bonus is
+      // reduced; only a salary bigger than the bonus costs the company more.
+      const fromBonus = t('salaryFromBonus', { amount: formatCurrency(result.nettedSalary) });
+      return result.deductedAmount > 0
+        ? `${fromBonus} · -${formatCurrency(result.deductedAmount)}`
+        : fromBonus;
     }
     if (result.deductedAmount > 0) {
       return `-${formatCurrency(result.deductedAmount)}`;
@@ -145,7 +142,6 @@ export function DraggablePipelineItem({
             <span className={`text-[10px] font-mono ${
               item.type === 'worker_commission'
                 || item.type === 'shared_pool_commission'
-                || (item.type === 'salary' && result?.addedSalary !== undefined)
                 ? 'text-blue-600'
                 : 'text-red-600'
             }`}>
@@ -158,6 +154,14 @@ export function DraggablePipelineItem({
       {isIndividualRevenue && (
         <Badge variant="outline" className="text-[9px] px-1 py-0 bg-blue-100 border-blue-300">
           {t('usesOwnRevenue')}
+        </Badge>
+      )}
+
+      {!isIndividualRevenue
+        && item.type === 'worker_commission'
+        && item.commissionBase === 'company_revenue' && (
+        <Badge variant="outline" className="text-[9px] px-1 py-0 bg-blue-100 border-blue-300">
+          {t('usesCompanyRevenue')}
         </Badge>
       )}
 

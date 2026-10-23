@@ -66,85 +66,110 @@ export function generateDefaultPipeline(workers: Worker[]): PipelineFormData {
 
 // ============ Pipeline Validation ============
 
+/** A pipeline problem, as a translation key under `pipeline.warnings` plus its values. */
+export type PipelineIssue =
+  | { code: 'emptyStep'; values: { step: number } }
+  | { code: 'duplicateTax'; values: { index: number } }
+  | { code: 'duplicateSalary'; values: { name: string } }
+  | { code: 'duplicateCommission'; values: { name: string } }
+  | { code: 'paidTwice'; values: { name: string } }
+  | { code: 'poolMemberWithoutSales'; values: { name: string } }
+  | { code: 'poolNoRate'; values: { step: number } }
+  | { code: 'poolNoMembers'; values: { step: number } }
+  | { code: 'missingWorker'; values: { step: number } };
+
 export interface PipelineValidationResult {
   valid: boolean;
-  warnings: string[];
-  errors: string[];
+  warnings: PipelineIssue[];
+  errors: PipelineIssue[];
 }
 
 /**
  * Validate a pipeline configuration.
  * Returns warnings for non-critical issues and errors for blocking issues.
+ * People with no card at all are fine: they are paid salary only.
  */
 export function validatePipeline(
   pipeline: PipelineFormData,
   workers: Worker[]
 ): PipelineValidationResult {
-  const warnings: string[] = [];
-  const errors: string[] = [];
-  const workerIds = new Set(workers.map(w => w.id));
+  const warnings: PipelineIssue[] = [];
+  const errors: PipelineIssue[] = [];
+  const workerMap = new Map(workers.map(w => [w.id, w]));
+  const nameOf = (id: string) => workerMap.get(id)?.name ?? id;
 
   // Track item placement
   const placedTaxes = new Set<number>();
   const placedSalaries = new Set<string>();
   const placedCommissions = new Set<string>();
+  const poolMembers = new Set<string>();
 
-  for (const row of pipeline.rows) {
+  pipeline.rows.forEach((row, rowIndex) => {
+    const step = rowIndex + 1;
     if (row.items.length === 0) {
-      warnings.push(`Empty row detected (${row.id}). Consider removing it.`);
+      warnings.push({ code: 'emptyStep', values: { step } });
     }
 
     for (const item of row.items) {
       // Check for duplicate tax items
       if (item.type === 'tax' && item.taxIndex) {
         if (placedTaxes.has(item.taxIndex)) {
-          warnings.push(`Tax ${item.taxIndex} appears more than once in the pipeline.`);
+          warnings.push({ code: 'duplicateTax', values: { index: item.taxIndex } });
         }
         placedTaxes.add(item.taxIndex);
       }
 
       // Check for duplicate salary items per worker
       if (item.type === 'salary' && item.workerId) {
-        if (placedSalaries.has(item.workerId)) {
-          warnings.push(`Duplicate salary deduction for worker.`);
+        if (!workerMap.has(item.workerId)) {
+          errors.push({ code: 'missingWorker', values: { step } });
+        } else if (placedSalaries.has(item.workerId)) {
+          warnings.push({ code: 'duplicateSalary', values: { name: nameOf(item.workerId) } });
         }
         placedSalaries.add(item.workerId);
-
-        // Check worker exists
-        if (!workerIds.has(item.workerId)) {
-          errors.push(`Salary item references non-existent worker.`);
-        }
       }
 
       // Check for duplicate commission items per worker
       if (item.type === 'worker_commission' && item.workerId) {
-        if (placedCommissions.has(item.workerId)) {
-          warnings.push(`Worker appears more than once in the pipeline.`);
+        if (!workerMap.has(item.workerId)) {
+          errors.push({ code: 'missingWorker', values: { step } });
+        } else if (placedCommissions.has(item.workerId)) {
+          warnings.push({ code: 'duplicateCommission', values: { name: nameOf(item.workerId) } });
         }
         placedCommissions.add(item.workerId);
-
-        if (!workerIds.has(item.workerId)) {
-          errors.push(`Commission item references non-existent worker.`);
-        }
       }
 
-      // Shared-pool participants count toward "has a commission slot" so the
-      // missing-commission warning doesn't fire for them.
       if (item.type === 'shared_pool_commission') {
-        for (const pid of item.participantIds ?? []) {
-          placedCommissions.add(pid);
-          if (!workerIds.has(pid)) {
-            errors.push(`Shared pool references non-existent worker.`);
+        const participantIds = item.participantIds ?? [];
+        if (participantIds.length === 0) {
+          warnings.push({ code: 'poolNoMembers', values: { step } });
+        } else if (!(item.poolRate && item.poolRate > 0)) {
+          warnings.push({ code: 'poolNoRate', values: { step } });
+        }
+        for (const pid of participantIds) {
+          const member = workerMap.get(pid);
+          if (!member) {
+            errors.push({ code: 'missingWorker', values: { step } });
+            continue;
+          }
+          poolMembers.add(pid);
+          // The default pool base is the members' own sales; a member
+          // without an own-sales field silently adds 0.
+          if (
+            (item.baseSource ?? 'participants_sum') === 'participants_sum'
+            && member.formula_config.revenueSource !== 'individual'
+          ) {
+            warnings.push({ code: 'poolMemberWithoutSales', values: { name: member.name } });
           }
         }
       }
     }
-  }
+  });
 
-  // Warn about workers without commissions in the pipeline
-  for (const worker of workers) {
-    if (!placedCommissions.has(worker.id)) {
-      warnings.push(`Worker "${worker.name}" has no commission slot in the pipeline.`);
+  // A pool member with an own commission card is paid twice.
+  for (const id of poolMembers) {
+    if (placedCommissions.has(id)) {
+      warnings.push({ code: 'paidTwice', values: { name: nameOf(id) } });
     }
   }
 

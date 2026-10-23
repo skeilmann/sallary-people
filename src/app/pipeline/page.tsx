@@ -30,10 +30,8 @@ import {
 } from '@/lib/supabase';
 import type { FormulaConfig } from '@/lib/types';
 import { generateDefaultPipeline } from '@/lib/pipeline-utils';
-import {
-  usePersistedGlobalInputs,
-  usePersistedPeriod,
-} from '@/lib/usePersistedInputs';
+import { usePersistedPeriod } from '@/lib/usePersistedInputs';
+import { useQuarterInputs } from '@/lib/useQuarterInputs';
 import type {
   BulkSaveFailure,
   BulkSaveRow,
@@ -60,9 +58,6 @@ function PipelinePageContent() {
     getCurrentYear(),
   );
   const currentPeriod = generatePeriod(quarter as Quarter, year);
-
-  // Global inputs shared with Dashboard
-  const { globalInputs } = usePersistedGlobalInputs();
 
   useEffect(() => {
     loadData();
@@ -110,6 +105,10 @@ function PipelinePageContent() {
     };
   }, [currentPeriod]);
 
+  // This quarter's company total (typed, or the sellers' total), shared with
+  // the builder and the Dashboard.
+  const { companyRevenue } = useQuarterInputs(currentPeriod, workers, calculationsByWorker);
+
   const refreshCalculationsForPeriod = async () => {
     const refreshed = await getCalculationsByWorkerForPeriod(currentPeriod).catch(() => null);
     if (refreshed) setCalculationsByWorker(refreshed);
@@ -149,12 +148,13 @@ function PipelinePageContent() {
       const isIndividual = worker.formula_config.revenueSource === 'individual';
       const baseValue = isIndividual
         ? (data.individualRevenue || 0)
-        : globalInputs.totalRevenue;
+        : companyRevenue;
 
       const inputs: CalculationInputs = {
         baseValue,
         salary: data.salary,
         individualRevenue: isIndividual ? data.individualRevenue : undefined,
+        companyRevenue,
       };
 
       await createCalculation({
@@ -192,11 +192,12 @@ function PipelinePageContent() {
         const isIndividual = worker.formula_config.revenueSource === 'individual';
         const baseValue = isIndividual
           ? (r.individualRevenue ?? 0)
-          : globalInputs.totalRevenue;
+          : companyRevenue;
         const inputs: CalculationInputs = {
           baseValue,
           salary: r.salary,
           individualRevenue: isIndividual ? r.individualRevenue : undefined,
+          companyRevenue,
         };
         await createCalculation({
           worker_id: r.workerId,

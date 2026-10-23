@@ -31,15 +31,14 @@ interface EditItemDialogProps {
   onClose: () => void;
 }
 
-// Returns rounded average commissionRate for the given worker ids.
-// Returns null when there are no participants — caller should skip the update.
-function averageCommissionRate(ids: string[], workers: Worker[]): number | null {
-  if (ids.length === 0) return null;
-  const rates = ids.map(
-    id => workers.find(w => w.id === id)?.formula_config.commissionRate ?? 0
+// Members' commission rates added together: two sellers on 4% each make an
+// 8% team pool.
+function sumCommissionRates(ids: string[], workers: Worker[]): number {
+  const total = ids.reduce(
+    (sum, id) => sum + (workers.find(w => w.id === id)?.formula_config.commissionRate ?? 0),
+    0
   );
-  const avg = rates.reduce((s, r) => s + r, 0) / rates.length;
-  return Math.round(avg * 10) / 10;
+  return Math.round(total * 100) / 100;
 }
 
 export function EditItemDialog({
@@ -130,6 +129,16 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
       ? item.baseSource ?? 'participants_sum'
       : 'participants_sum'
   );
+  const [commissionBase, setCommissionBase] = useState<'running_total' | 'company_revenue'>(
+    item.type === 'worker_commission'
+      ? item.commissionBase ?? 'running_total'
+      : 'running_total'
+  );
+
+  const selectedWorker = workers.find(w => w.id === workerId);
+  const selectedWorkerUsesCompanyRevenue =
+    !!selectedWorker && selectedWorker.formula_config.revenueSource !== 'individual';
+  const membersRate = sumCommissionRates(participantIds, workers);
 
   // Constraint sets — "placed elsewhere" excludes the current item being edited
   const otherItems = rows.flatMap(r => r.items).filter(i => i.id !== item.id);
@@ -148,9 +157,18 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
 
     if (item.type === 'tax') {
       patch = { taxIndex };
-    } else if (item.type === 'salary' || item.type === 'worker_commission') {
+    } else if (item.type === 'salary') {
       if (!workerId) return;
       patch = { workerId };
+    } else if (item.type === 'worker_commission') {
+      if (!workerId) return;
+      patch = {
+        workerId,
+        commissionBase:
+          selectedWorkerUsesCompanyRevenue && commissionBase === 'company_revenue'
+            ? 'company_revenue'
+            : undefined,
+      };
     } else if (item.type === 'custom_deduction') {
       if (!customLabel.trim()) return;
       patch = {
@@ -243,6 +261,29 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
           </div>
         )}
 
+        {item.type === 'worker_commission' && selectedWorkerUsesCompanyRevenue && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('commissionBase')}</Label>
+            <Select
+              value={commissionBase}
+              onValueChange={(v) => setCommissionBase(v as 'running_total' | 'company_revenue')}
+            >
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="running_total">{t('commissionBaseRunningTotal')}</SelectItem>
+                <SelectItem value="company_revenue">{t('commissionBaseCompany')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">
+              {commissionBase === 'company_revenue'
+                ? t('commissionBaseCompanyHint')
+                : t('commissionBaseRunningTotalHint')}
+            </p>
+          </div>
+        )}
+
         {item.type === 'shared_pool_commission' && (
           <>
             <div className="space-y-1.5">
@@ -269,6 +310,31 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
                 />
                 <span className="text-muted-foreground text-sm">%</span>
               </div>
+              {participantIds.length > 0 && (
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <span>
+                    {t('sharedPoolRateHint', {
+                      rates: participantIds
+                        .map((id) => {
+                          const w = workers.find((x) => x.id === id);
+                          return w ? `${w.name} ${w.formula_config.commissionRate}%` : null;
+                        })
+                        .filter(Boolean)
+                        .join(' + '),
+                      total: membersRate,
+                    })}
+                  </span>
+                  {poolRate !== membersRate && (
+                    <button
+                      type="button"
+                      onClick={() => setPoolRate(membersRate)}
+                      className="text-primary underline underline-offset-2"
+                    >
+                      {t('sharedPoolUseRate', { total: membersRate })}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -319,12 +385,18 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
                               ? [...participantIds, w.id]
                               : participantIds.filter(id => id !== w.id);
                             setParticipantIds(newIds);
-                            const newRate = averageCommissionRate(newIds, workers);
-                            if (newRate !== null) setPoolRate(newRate);
+                            // Follow the members' rates unless a different
+                            // rate was typed.
+                            if (poolRate === 0 || poolRate === membersRate) {
+                              setPoolRate(sumCommissionRates(newIds, workers));
+                            }
                           }}
                           className="cursor-pointer"
                         />
                         <span>{w.name}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {w.formula_config.commissionRate}%
+                        </span>
                         {(w.formula_config.salaryAmount ?? 0) > 0 && (
                           <span className="text-[10px] text-muted-foreground ml-auto">
                             {w.formula_config.salaryPeriod === 'monthly'
