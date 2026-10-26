@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { Quarter, Worker } from '@/lib/types';
-import { formatCurrency } from '@/lib/formulas';
+import { formatCurrency, formatSalary, getEffectiveSalary } from '@/lib/formulas';
 
 const quarters: Quarter[] = ['Q1', 'Q2', 'Q3', 'Q4'];
 
@@ -118,8 +118,10 @@ export function QuarterInputsCard({
           ))}
 
           {dayWorkers.map((worker) => {
-            const rate = worker.formula_config.salaryAmount ?? 0;
+            const config = worker.formula_config;
+            const rate = config.salaryAmount ?? 0;
             const workedDays = days[worker.id] ?? 0;
+            const inEuro = getEffectiveSalary(config, rate, workedDays);
             return (
               <div key={worker.id} className="space-y-2">
                 <Label htmlFor={`days-${worker.id}`}>{t('daysWorked', { name: worker.name })}</Label>
@@ -134,10 +136,16 @@ export function QuarterInputsCard({
                   placeholder="0"
                 />
                 <p className="text-xs text-muted-foreground tabular-nums">
-                  {t('daysSalary', {
-                    rate: formatCurrency(rate),
-                    total: formatCurrency(rate * workedDays),
-                  })}
+                  {config.salaryCurrency === 'RON'
+                    ? t('daysSalaryConverted', {
+                        rate: formatSalary(config, rate),
+                        local: formatSalary(config, rate * workedDays),
+                        total: formatCurrency(inEuro),
+                      })
+                    : t('daysSalary', {
+                        rate: formatCurrency(rate),
+                        total: formatCurrency(inEuro),
+                      })}
                 </p>
               </div>
             );

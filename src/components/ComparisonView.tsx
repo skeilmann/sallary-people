@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { CalculationWithWorker } from '@/lib/types';
-import { formatCurrency } from '@/lib/formulas';
+import { formatCurrency, formatMoney } from '@/lib/formulas';
 
 interface ComparisonViewProps {
   calculations: CalculationWithWorker[];
@@ -25,7 +25,7 @@ export function ComparisonView({ calculations }: ComparisonViewProps) {
   // Get all unique input keys across all calculations
   const allInputKeys = Array.from(
     new Set(calculations.flatMap((c) => Object.keys(c.inputs)))
-  ).filter((key) => key !== 'returns' && key !== 'chargebacks' && key !== 'discounts');
+  ).filter((key) => !['returns', 'chargebacks', 'discounts', 'salaryCurrency'].includes(key));
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -54,7 +54,9 @@ export function ComparisonView({ calculations }: ComparisonViewProps) {
                           ? '—'
                           : key === 'daysWorked'
                             ? value
-                            : formatCurrency(value as number)}
+                            : key === 'salary'
+                              ? formatMoney(value as number, calc.inputs.salaryCurrency)
+                              : formatCurrency(value as number)}
                       </span>
                     </div>
                   );

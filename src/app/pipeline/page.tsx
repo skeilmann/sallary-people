@@ -110,6 +110,8 @@ function PipelinePageContent() {
   const { companyRevenue, days } = useQuarterInputs(currentPeriod, workers, calculationsByWorker);
   const daysWorkedFor = (worker: Worker) =>
     worker.formula_config.salaryPeriod === 'daily' ? days[worker.id] ?? 0 : undefined;
+  const salaryCurrencyFor = (worker: Worker) =>
+    worker.formula_config.salaryCurrency === 'RON' ? 'RON' as const : undefined;
 
   const refreshCalculationsForPeriod = async () => {
     const refreshed = await getCalculationsByWorkerForPeriod(currentPeriod).catch(() => null);
@@ -158,6 +160,7 @@ function PipelinePageContent() {
         individualRevenue: isIndividual ? data.individualRevenue : undefined,
         companyRevenue,
         daysWorked: daysWorkedFor(worker),
+        salaryCurrency: salaryCurrencyFor(worker),
       };
 
       await createCalculation({
@@ -202,6 +205,7 @@ function PipelinePageContent() {
           individualRevenue: isIndividual ? r.individualRevenue : undefined,
           companyRevenue,
           daysWorked: daysWorkedFor(worker),
+          salaryCurrency: salaryCurrencyFor(worker),
         };
         await createCalculation({
           worker_id: r.workerId,

@@ -19,8 +19,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import type { Worker, FormulaConfig, SalaryPeriod } from '@/lib/types';
+import type { Worker, FormulaConfig, SalaryCurrency, SalaryPeriod } from '@/lib/types';
 import { defaultFormulaConfig } from '@/lib/types';
+import { RON_PER_EUR } from '@/lib/formulas';
 
 interface WorkerFormProps {
   worker?: Worker;
@@ -250,6 +251,28 @@ export function WorkerForm({ worker, open, onClose, onSave }: WorkerFormProps) {
               <p className="text-xs text-muted-foreground">
                 {t('form.salaryPeriodHelp')}
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="salaryCurrency">{t('form.salaryCurrency')}</Label>
+              <Select
+                value={config.salaryCurrency ?? 'EUR'}
+                onValueChange={(value) =>
+                  setConfig((prev) => ({
+                    ...prev,
+                    salaryCurrency: value as SalaryCurrency,
+                  }))
+                }
+              >
+                <SelectTrigger id="salaryCurrency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EUR">{t('form.salaryCurrencyEur')}</SelectItem>
+                  <SelectItem value="RON">
+                    {t('form.salaryCurrencyRon', { rate: RON_PER_EUR })}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

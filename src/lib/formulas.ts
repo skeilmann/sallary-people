@@ -1,17 +1,37 @@
 import type { FormulaConfig, CalculationInputs, GlobalCalculationInputs } from './types';
 
+/** Fixed exchange rate for salaries agreed in lei: 1 € = 5.1 RON. */
+export const RON_PER_EUR = 5.1;
+
 /**
- * The entered salary may represent a single month, the full quarter, or one
- * day. The bonus period is quarterly, so monthly amounts are multiplied by 3
- * and daily amounts by the days worked in the quarter.
+ * Salary for the quarter in the worker's own currency. The entered salary
+ * may represent a single month, the full quarter, or one day: monthly
+ * amounts are multiplied by 3 and daily amounts by the days worked.
+ */
+export function getQuarterSalaryInOwnCurrency(
+  config: FormulaConfig,
+  rawSalary: number,
+  daysWorked = 0,
+): number {
+  if (config.salaryPeriod === 'daily') return rawSalary * daysWorked;
+  return config.salaryPeriod === 'monthly' ? rawSalary * 3 : rawSalary;
+}
+
+/** An amount in the worker's salary currency, in euro. */
+export function salaryToEuro(config: FormulaConfig, amount: number): number {
+  return config.salaryCurrency === 'RON' ? amount / RON_PER_EUR : amount;
+}
+
+/**
+ * Salary for the quarter in euro, which is what every calculation uses.
  */
 export function getEffectiveSalary(
   config: FormulaConfig,
   rawSalary: number,
   daysWorked = 0,
 ): number {
-  if (config.salaryPeriod === 'daily') return Math.round(rawSalary * daysWorked * 100) / 100;
-  return config.salaryPeriod === 'monthly' ? rawSalary * 3 : rawSalary;
+  const quarterSalary = getQuarterSalaryInOwnCurrency(config, rawSalary, daysWorked);
+  return Math.round(salaryToEuro(config, quarterSalary) * 100) / 100;
 }
 
 /**
@@ -175,6 +195,16 @@ export function formatCurrency(amount: number): string {
     style: 'currency',
     currency: CURRENCY,
   }).format(amount);
+}
+
+/** An amount in any currency, e.g. a salary agreed in lei. */
+export function formatMoney(amount: number, currency: string = CURRENCY): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+}
+
+/** A salary amount in the worker's own salary currency. */
+export function formatSalary(config: FormulaConfig, amount: number): string {
+  return formatMoney(amount, config.salaryCurrency ?? CURRENCY);
 }
 
 /** Whole euros, for headline numbers where cents only add noise. */

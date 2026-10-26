@@ -66,7 +66,7 @@ describe('summarizeMoneyFlow', () => {
     expect(francesca).toMatchObject({ quarterSalary: 3_600, bonus: 0, hasRule: false, totalPay: 3_600 });
   });
 
-  it('pays someone on a daily rate for the days worked, plus the bonus', () => {
+  it('pays someone on a daily rate in lei for the days worked, in euro, plus the bonus', () => {
     const totalRevenue = resolveCompanyRevenue(undefined, companyWorkers, sales);
     const workerInputs = buildWorkerInputs(companyWorkers, sales, { George: 25 });
     expect(workerInputs.George.daysWorked).toBe(25);
@@ -77,12 +77,16 @@ describe('summarizeMoneyFlow', () => {
     const flow = summarizeMoneyFlow(result, companyWorkers, workerInputs);
     const george = flow.people.find((p) => p.workerId === 'George')!;
     expect(george).toMatchObject({
-      quarterSalary: 3_000, // 25 days × 120
-      perDay: { days: 25, rate: 120 },
+      // 25 days × 275 RON = 6,875 RON; at 5.1 RON per euro = €1,348.04
+      quarterSalary: 1_348.04,
+      localSalary: { amount: 6_875, currency: 'RON' },
+      perDay: { days: 25, rate: 275, currency: 'RON' },
       bonus: 1_500, // 1% of all company sales, unchanged
-      totalPay: 4_500,
+      totalPay: 2_848.04,
     });
-    expect(flow.salaries).toBe(12_600 + 3_000);
+    expect(flow.salaries).toBe(12_600 + 1_348.04);
+    // Salaries agreed in euro have no second currency.
+    expect(flow.people.find((p) => p.workerId === 'Kiril')!.localSalary).toBeUndefined();
   });
 
   it('adds what-if bonuses on top, and they reduce what the company keeps', () => {

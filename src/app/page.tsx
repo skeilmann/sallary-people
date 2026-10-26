@@ -243,6 +243,7 @@ function DashboardPageContent() {
             individualRevenue: seller ? sales[row.workerId] ?? 0 : undefined,
             companyRevenue,
             daysWorked: worker && isPaidPerDay(worker) ? days[row.workerId] ?? 0 : undefined,
+            salaryCurrency: worker?.formula_config.salaryCurrency === 'RON' ? 'RON' : undefined,
           },
           calculated_amount: row.calculatedAmount,
           adjustment_amount: row.adjustmentAmount,

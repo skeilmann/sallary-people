@@ -147,7 +147,9 @@
     "whatIfSummary": "Cu toate aceste bonusuri, companiei i-ar rămâne {after} în loc de {before}.",
     "daysWorked": "Zile lucrate de {name}",
     "daysSalary": "{rate} pe zi = {total} pe trimestru",
-    "daysTimesRate": "{days} zile × {rate}"
+    "daysTimesRate": "{days} zile × {rate}",
+    "daysSalaryConverted": "{rate} pe zi = {local} = {total} pe trimestru",
+    "salaryConverted": "{amount} la {rate} RON = 1 €"
   },
   "workers": {
     "title": "Angajați",
@@ -178,7 +180,10 @@
       "revenueSourceIndividual": "Venituri Vânzări Individuale",
       "revenueSourceHelp": "Alege dacă bonusul se calculează din veniturile totale sau din vânzările individuale ale acestui angajat",
       "salaryPeriodDaily": "Pe zi (× zilele lucrate în trimestru)",
-      "dailyRate": "Plată pe zi"
+      "dailyRate": "Plată pe zi",
+      "salaryCurrency": "Moneda salariului",
+      "salaryCurrencyEur": "Euro (€)",
+      "salaryCurrencyRon": "Lei (RON), convertiți la {rate} RON = 1 €"
     },
     "metrics": {
       "revenue": "Venituri",

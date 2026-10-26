@@ -4,7 +4,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { CheckCircle2, Loader2, AlertCircle, CircleDot } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatCurrency } from '@/lib/formulas';
+import { formatCurrency, formatMoney, RON_PER_EUR } from '@/lib/formulas';
 import type { ExplainedStep, MoneyFlow, PersonPay } from '@/lib/money-flow';
 
 type Translate = ReturnType<typeof useTranslations>;
@@ -98,7 +98,18 @@ export function PeopleTableCard({
                   <p className="text-xs text-muted-foreground">{describeRule(p, steps, t)}</p>
                   {p.perDay && (
                     <p className="text-xs text-muted-foreground tabular-nums">
-                      {t('daysTimesRate', { days: p.perDay.days, rate: formatCurrency(p.perDay.rate) })}
+                      {t('daysTimesRate', {
+                        days: p.perDay.days,
+                        rate: formatMoney(p.perDay.rate, p.perDay.currency),
+                      })}
+                    </p>
+                  )}
+                  {p.localSalary && (
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {t('salaryConverted', {
+                        amount: formatMoney(p.localSalary.amount, p.localSalary.currency),
+                        rate: RON_PER_EUR,
+                      })}
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground tabular-nums sm:hidden">

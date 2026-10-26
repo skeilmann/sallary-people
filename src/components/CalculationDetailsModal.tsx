@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { CalculationWithWorker } from '@/lib/types';
-import { formatCurrency } from '@/lib/formulas';
+import { formatCurrency, formatMoney } from '@/lib/formulas';
 
 interface CalculationDetailsModalProps {
   calculation: CalculationWithWorker | null;
@@ -52,7 +52,7 @@ export function CalculationDetailsModal({
               <p className="text-sm text-muted-foreground mb-2">{t('detail.inputs')}</p>
               <div className="bg-muted p-3 rounded space-y-1">
                 {Object.entries(calculation.inputs)
-                  .filter(([key]) => key !== 'returns' && key !== 'chargebacks' && key !== 'discounts')
+                  .filter(([key]) => !['returns', 'chargebacks', 'discounts', 'salaryCurrency'].includes(key))
                   .map(([key, value]) => (
                     <div key={key} className="flex justify-between text-sm">
                       <span className="capitalize">{key.replace('_', ' ')}</span>
@@ -61,7 +61,9 @@ export function CalculationDetailsModal({
                           ? value
                           : key === 'daysWorked'
                             ? value
-                            : formatCurrency(value)}
+                            : key === 'salary'
+                              ? formatMoney(value, calculation.inputs.salaryCurrency)
+                              : formatCurrency(value)}
                       </span>
                     </div>
                   ))}

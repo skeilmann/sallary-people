@@ -46,8 +46,10 @@ export const liuba = makeWorker('Liuba', {
   commissionRate: 4, salaryAmount: 550, salaryPeriod: 'monthly', revenueSource: 'individual',
 });
 export const costea = makeWorker('Costea', { commissionRate: 10, revenueSource: 'individual' });
-// Paid per day worked (the rate here is made up for the tests).
-export const george = makeWorker('George', { commissionRate: 1, salaryAmount: 120, salaryPeriod: 'daily' });
+// Paid 275 lei per day worked, plus 1% of all company sales.
+export const george = makeWorker('George', {
+  commissionRate: 1, salaryAmount: 275, salaryPeriod: 'daily', salaryCurrency: 'RON',
+});
 export const francesca = makeWorker('Francesca', { commissionRate: 0, salaryAmount: 1200, salaryPeriod: 'monthly' });
 export const lorenzo = makeWorker('Lorenzo', { commissionRate: 0, salaryAmount: 1000, salaryPeriod: 'monthly' });
 

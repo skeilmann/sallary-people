@@ -18,7 +18,9 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { Worker, GlobalCalculationInputs, FormulaConfig, SalaryPeriod } from '@/lib/types';
+import type {
+  Worker, GlobalCalculationInputs, FormulaConfig, SalaryCurrency, SalaryPeriod,
+} from '@/lib/types';
 import {
   Select,
   SelectContent,
@@ -32,6 +34,8 @@ import {
   getCalculationBreakdown,
   getEffectiveSalary,
   calculateFinalAmount,
+  formatSalary,
+  RON_PER_EUR,
 } from '@/lib/formulas';
 import type { ExplainedStep } from '@/lib/money-flow';
 import { StepExplanationList } from '@/components/StepExplanation';
@@ -133,6 +137,9 @@ export function WorkerBonusCard({
   const [editSalaryPeriod, setEditSalaryPeriod] = useState<SalaryPeriod>(
     worker.formula_config.salaryPeriod ?? 'quarterly',
   );
+  const [editSalaryCurrency, setEditSalaryCurrency] = useState<SalaryCurrency>(
+    worker.formula_config.salaryCurrency ?? 'EUR',
+  );
   const [editRevenueSource, setEditRevenueSource] = useState<'global' | 'individual'>(
     worker.formula_config.revenueSource ?? 'global',
   );
@@ -146,12 +153,14 @@ export function WorkerBonusCard({
     setEditCommissionRate(worker.formula_config.commissionRate);
     setEditSalaryAmount(worker.formula_config.salaryAmount ?? 0);
     setEditSalaryPeriod(worker.formula_config.salaryPeriod ?? 'quarterly');
+    setEditSalaryCurrency(worker.formula_config.salaryCurrency ?? 'EUR');
     setEditRevenueSource(worker.formula_config.revenueSource ?? 'global');
   }, [
     worker.name,
     worker.formula_config.commissionRate,
     worker.formula_config.salaryAmount,
     worker.formula_config.salaryPeriod,
+    worker.formula_config.salaryCurrency,
     worker.formula_config.revenueSource,
   ]);
 
@@ -216,6 +225,7 @@ export function WorkerBonusCard({
         commissionRate: editCommissionRate,
         salaryAmount: editSalaryAmount,
         salaryPeriod: editSalaryPeriod,
+        salaryCurrency: editSalaryCurrency,
         revenueSource: editRevenueSource,
       };
       await onUpdateWorker(worker.id, {
@@ -340,7 +350,7 @@ export function WorkerBonusCard({
                   {isMonthly
                     ? t('revenueAfterSalaryMonthly', {
                         revenue: revenueDisplay,
-                        salary: formatCurrency(rawSalary),
+                        salary: formatSalary(config, rawSalary),
                         effective: formatCurrency(effectiveSalary),
                       })
                     : t('revenueAfterSalary', {
@@ -567,7 +577,7 @@ export function WorkerBonusCard({
                   <span className="text-[10px] text-muted-foreground/70 group-open:hidden">
                     {config.commissionRate}%
                     {(worker.formula_config.salaryAmount ?? 0) > 0
-                      && ` · ${formatCurrency(worker.formula_config.salaryAmount ?? 0)}${
+                      && ` · ${formatSalary(config, worker.formula_config.salaryAmount ?? 0)}${
                         (worker.formula_config.salaryPeriod ?? 'quarterly') === 'monthly'
                           ? t('perMonthShort')
                           : worker.formula_config.salaryPeriod === 'daily'
@@ -652,6 +662,26 @@ export function WorkerBonusCard({
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">
+                      {tWorkers('form.salaryCurrency')}
+                    </Label>
+                    <Select
+                      value={editSalaryCurrency}
+                      onValueChange={(v) => setEditSalaryCurrency(v as SalaryCurrency)}
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="EUR">{tWorkers('form.salaryCurrencyEur')}</SelectItem>
+                        <SelectItem value="RON">
+                          {tWorkers('form.salaryCurrencyRon', { rate: RON_PER_EUR })}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-1.5">

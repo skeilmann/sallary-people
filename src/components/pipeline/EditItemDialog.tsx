@@ -399,6 +399,7 @@ function EditItemForm({ item, rows, workers, onSave, onClose }: EditItemFormProp
                         </span>
                         {(w.formula_config.salaryAmount ?? 0) > 0 && (
                           <span className="text-[10px] text-muted-foreground ml-auto">
+                            {w.formula_config.salaryCurrency === 'RON' ? 'RON ' : ''}
                             {w.formula_config.salaryPeriod === 'monthly'
                               ? `${w.formula_config.salaryAmount}/mo`
                               : w.formula_config.salaryPeriod === 'daily'

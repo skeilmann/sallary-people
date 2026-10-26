@@ -1,10 +1,14 @@
-import type { CalculationWithWorker, GlobalCalculationInputs, Worker } from './types';
+import type { CalculationWithWorker, GlobalCalculationInputs, SalaryCurrency, Worker } from './types';
 import type {
   CalculationPipeline,
   PipelineExecutionResult,
   PipelineItemResult,
 } from './pipeline-types';
-import { calculateFinalAmount, getEffectiveSalary } from './formulas';
+import {
+  calculateFinalAmount,
+  getEffectiveSalary,
+  getQuarterSalaryInOwnCurrency,
+} from './formulas';
 
 /** Per-worker inputs in the shape the pipeline engine expects. */
 export type WorkerInputs = Record<
@@ -258,9 +262,13 @@ export function stepInvolvesWorker(step: ExplainedStep, workerId: string): boole
 export interface PersonPay {
   workerId: string;
   name: string;
+  /** Salary for the quarter, in euro. */
   quarterSalary: number;
-  /** For workers paid per day: how the quarter salary was made up. */
-  perDay?: { days: number; rate: number };
+  /** When the salary is agreed in another currency: the quarter salary in it. */
+  localSalary?: { amount: number; currency: SalaryCurrency };
+  /** For workers paid per day: how the quarter salary was made up (rate in
+   *  the salary's own currency). */
+  perDay?: { days: number; rate: number; currency: SalaryCurrency };
   /** True when a commission or shared-pool card gives this person a bonus. */
   hasRule: boolean;
   /** Bonus from the pipeline rules. */
@@ -313,16 +321,20 @@ export function summarizeMoneyFlow(
     const extraBonus = roundCents(extraBonuses[w.id] ?? 0);
     const adjustment = roundCents(adjustments[w.id] ?? 0);
     const bonusToPay = calculateFinalAmount(bonus + extraBonus, adjustment);
+    const currency = w.formula_config.salaryCurrency ?? 'EUR';
+    const rawSalary = workerInputs[w.id]?.salary ?? w.formula_config.salaryAmount ?? 0;
+    const daysWorked = workerInputs[w.id]?.daysWorked ?? 0;
     return {
       workerId: w.id,
       name: w.name,
       quarterSalary: salary,
-      perDay: isPaidPerDay(w)
+      localSalary: currency !== 'EUR'
         ? {
-            days: workerInputs[w.id]?.daysWorked ?? 0,
-            rate: workerInputs[w.id]?.salary ?? w.formula_config.salaryAmount ?? 0,
+            amount: roundCents(getQuarterSalaryInOwnCurrency(w.formula_config, rawSalary, daysWorked)),
+            currency,
           }
         : undefined,
+      perDay: isPaidPerDay(w) ? { days: daysWorked, rate: rawSalary, currency } : undefined,
       hasRule,
       bonus,
       extraBonus,

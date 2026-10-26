@@ -147,7 +147,9 @@
     "whatIfSummary": "Con tutti questi bonus all'azienda resterebbero {after} invece di {before}.",
     "daysWorked": "Giorni lavorati da {name}",
     "daysSalary": "{rate} al giorno = {total} per il trimestre",
-    "daysTimesRate": "{days} giorni × {rate}"
+    "daysTimesRate": "{days} giorni × {rate}",
+    "daysSalaryConverted": "{rate} al giorno = {local} = {total} per il trimestre",
+    "salaryConverted": "{amount} a {rate} RON = 1 €"
   },
   "workers": {
     "title": "Dipendenti",
@@ -178,7 +180,10 @@
       "revenueSourceIndividual": "Fatturato Vendite Individuali",
       "revenueSourceHelp": "Scegli se il bonus viene calcolato dal fatturato totale o dalle vendite individuali di questo dipendente",
       "salaryPeriodDaily": "Al giorno (× giorni lavorati nel trimestre)",
-      "dailyRate": "Paga giornaliera"
+      "dailyRate": "Paga giornaliera",
+      "salaryCurrency": "Valuta dello stipendio",
+      "salaryCurrencyEur": "Euro (€)",
+      "salaryCurrencyRon": "Lei (RON), convertiti a {rate} RON = 1 €"
     },
     "metrics": {
       "revenue": "Fatturato",

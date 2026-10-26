@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { CalculationWithWorker } from '@/lib/types';
-import { formatCurrency } from '@/lib/formulas';
+import { formatCurrency, formatMoney } from '@/lib/formulas';
 
 interface HistoricalComparisonCardProps {
   calculation: CalculationWithWorker;
@@ -69,7 +69,8 @@ export function HistoricalComparisonCard({
           {calculation.inputs.salary && calculation.inputs.salary > 0 && (
             <div className="flex justify-between">
               <span>{t('salary')}</span>
-              <span>-{formatCurrency(calculation.inputs.salary)}</span>
+              {/* The salary setting at save time, not a deduction from the bonus */}
+              <span>{formatMoney(calculation.inputs.salary, calculation.inputs.salaryCurrency)}</span>
             </div>
           )}
         </div>

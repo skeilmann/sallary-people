@@ -1,6 +1,9 @@
 /** What a worker's salaryAmount means. Bonuses are per quarter. */
 export type SalaryPeriod = 'monthly' | 'quarterly' | 'daily';
 
+/** Currency a worker's salary is agreed in. Everything else is in euro. */
+export type SalaryCurrency = 'EUR' | 'RON';
+
 // Formula configuration stored in worker profile
 export interface FormulaConfig {
   baseMetric: 'revenue' | 'units_sold' | 'profit_margin';
@@ -13,6 +16,9 @@ export interface FormulaConfig {
   // 'monthly' = per-month amount that gets multiplied ×3 for the quarterly bonus calc;
   // 'daily' = pay per day, multiplied by the days worked in the quarter.
   salaryPeriod?: SalaryPeriod;
+  // Currency of salaryAmount. Lei are converted to euro at a fixed rate
+  // (RON_PER_EUR); undefined means euro.
+  salaryCurrency?: SalaryCurrency;
   /**
    * @deprecated Salary deduction is now decided by the pipeline (presence of a
    * salary card), not this flag. Kept on the interface for backward compat with
@@ -37,6 +43,8 @@ export interface CalculationInputs {
   companyRevenue?: number;
   // Days worked in the quarter (workers paid per day)
   daysWorked?: number;
+  // Currency of `salary` when it is not euro
+  salaryCurrency?: SalaryCurrency;
 }
 
 // Global inputs for batch calculation (entered once, used for all workers)

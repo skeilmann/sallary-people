@@ -147,7 +147,9 @@
     "whatIfSummary": "With all these bonuses the company would keep {after} instead of {before}.",
     "daysWorked": "Days {name} worked",
     "daysSalary": "{rate} per day = {total} for the quarter",
-    "daysTimesRate": "{days} days × {rate}"
+    "daysTimesRate": "{days} days × {rate}",
+    "daysSalaryConverted": "{rate} per day = {local} = {total} for the quarter",
+    "salaryConverted": "{amount} at {rate} RON = €1"
   },
   "workers": {
     "title": "Workers",
@@ -178,7 +180,10 @@
       "revenueSourceIndividual": "Individual Sales Revenue",
       "revenueSourceHelp": "Choose whether bonus is calculated from total revenue or this worker's individual sales",
       "salaryPeriodDaily": "Per day (× days worked in the quarter)",
-      "dailyRate": "Pay per day"
+      "dailyRate": "Pay per day",
+      "salaryCurrency": "Salary currency",
+      "salaryCurrencyEur": "Euro (€)",
+      "salaryCurrencyRon": "Lei (RON), converted at {rate} RON = €1"
     },
     "metrics": {
       "revenue": "Revenue",

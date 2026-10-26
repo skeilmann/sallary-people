@@ -45,7 +45,7 @@ export function WorkerCard({ worker, onEdit, onDelete, onCalculate }: WorkerCard
             </Badge>
             {config.salaryAmount ? (
               <Badge variant="outline" className="text-blue-600 border-blue-300 hidden lg:inline-flex">
-                {new Intl.NumberFormat('en-US', { style: 'currency', currency: CURRENCY, maximumFractionDigits: 0 }).format(config.salaryAmount)}
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: config.salaryCurrency ?? CURRENCY, maximumFractionDigits: 0 }).format(config.salaryAmount)}
                 {config.salaryPeriod === 'daily' ? tBonusCard('perDayShort') : null}
               </Badge>
             ) : null}
